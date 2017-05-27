@@ -20,6 +20,7 @@ def load_img(filepath):
 class CharadesLoader(data.Dataset):
     def __init__(self, base_dir, input_transform=None, target_transform=None, fps=25, split='train'):
         super(CharadesLoader, self).__init__()
+        self.batch_size = 1
         self.fps = 24
         self.base_dir = base_dir
         self.video_names = open(os.path.join(base_dir, '%s.txt'%split)).read().split('\n')
