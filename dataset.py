@@ -14,6 +14,9 @@ def load_img(filepath):
     #img = Image.open(filepath).convert('YCbCr')
     #y, _, _ = img.split()
     img = cv2.imread(filepath)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = img.astype('float')/255.0
+    #img = cv2.normalize(img.astype('float'), None, 0.0, 1.0, cv2.NORM_MINMAX)
     return img
 
 
@@ -59,14 +62,17 @@ class CharadesLoader(data.Dataset):
             for flowNum in range(frameNum-1, frameNum+2):
                 flowx = load_img(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '%s-%06dx.jpg' % (video_name, flowNum)))
                 flowy = load_img(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '%s-%06dy.jpg' % (video_name, flowNum)))
-                flowx = cv2.cvtColor(flowx, cv2.COLOR_BGR2GRAY)
-                flowy = cv2.cvtColor(flowy, cv2.COLOR_BGR2GRAY)
+                flowx = flowx[:, :, 0]#cv2.cvtColor(flowx, cv2.COLOR_BGR2GRAY)
+                flowy = flowy[:, :, 0]#cv2.cvtColor(flowy, cv2.COLOR_BGR2GRAY)
                 j = 2*(flowNum - (frameNum-1))
                 flow_tensor[i, j, :, :] = torch.from_numpy(flowx)
                 flow_tensor[i, j+1, :, :] = torch.from_numpy(flowy)
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
-        #rgb_tensor = normalize(rgb_tensor)
+        normalizeFlow = transforms.Normalize(mean=[0.485],
+                                     std=[0.229])
+        rgb_tensor = normalize(rgb_tensor)
+        flow_tensor = normalizeFlow(flow_tensor)
         input = (rgb_tensor, flow_tensor)
         target = [157] * seq_len
         for action in self.actions[video_name]:
