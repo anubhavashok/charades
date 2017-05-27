@@ -11,7 +11,7 @@ from torch.nn import LSTM
 NUM_ACTIONS = 157 + 1
 FEATURE_SIZE = 2048#4096
 
-LAMBDA = 1#0.3
+LAMBDA = 0#0.3
 epochs = 50
 
 # TODO: Try lstm
@@ -44,21 +44,22 @@ class TwoStreamNetwork(nn.Module):
         self.lstm = torch.nn.LSTM(FEATURE_SIZE*2, self.hidden_size, 2, bidirectional=True)
         
     def reset_hidden(self, batch=1):
-        self.h = (Variable(torch.Tensor(2*2, batch, self.hidden_size)), Variable(torch.Tensor(2*2, batch, self.hidden_size)))
+        self.h = (Variable(torch.zeros(2*2, batch, self.hidden_size)), Variable(torch.zeros(2*2, batch, self.hidden_size)))
     
     def forward(self, rgb, flow):
         feat = torch.cat([self.RGBStream(rgb), self.FlowStream(flow)], dim=1)
-        feat = feat.unsqueeze(0)
-        print(feat.size(), self.h[0].size())
+        feat = feat.unsqueeze(1)
+        #print(feat.size(), self.h[0].size())
         out, self.h = self.lstm(feat, self.h)
-        return out.squeeze(0)
+        #print(out.size())
+        return out.squeeze(1)
 
 
 twoStreamNetwork = TwoStreamNetwork()#.cuda()
 actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)#.cuda()
 for p in actionClassifier.parameters():
     clip_grad(p, -1, 1)
-optimizer = optim.Adam(twoStreamNetwork.parameters(), lr=0.001)
+optimizer = optim.Adam([{'params': twoStreamNetwork.parameters()}, {'params': actionClassifier.parameters()}], lr=0.001)
 
 train_loader = CharadesLoader('.', split="train")
 val_loader = CharadesLoader('.', split="val")
@@ -78,9 +79,8 @@ def trainStep(curRGB, nextRGB, curFlow, nextFlow, target):
         nextFlow - Optical flow frames around nextRGB
     '''
     optimizer.zero_grad()
-    curFeature = twoStreamNetwork(curRGB, curFlow)
     nextFeature = twoStreamNetwork(nextRGB, nextFlow).detach()
-    print(curFeature.size())
+    curFeature = twoStreamNetwork(curRGB, curFlow)
     actionFeature = actionClassifier(curFeature)
     # Maybe use KL-divergence
     #predictionLoss = kldivLoss(F.softmax(curFeature),  F.softmax(nextFeature))
@@ -90,9 +90,9 @@ def trainStep(curRGB, nextRGB, curFlow, nextFlow, target):
     _, action = torch.max(actionFeature, 1)
     print(action.data.cpu().numpy()[0], target.data.cpu().numpy()[0])
     jointLoss = recognitionLoss + LAMBDA * predictionLoss
-    totalLoss += jointLoss.data.cpu().numpy()[0]
     jointLoss.backward()
     optimizer.step()
+    totalLoss += jointLoss.data.cpu().numpy()[0]
 
 def train():
     global totalLoss
@@ -103,13 +103,32 @@ def train():
         for batch_idx, (data, target) in enumerate(train_loader):
             (rgb, flow) = data
             twoStreamNetwork.reset_hidden()
-            for i in range(1, rgb.size(0)):
+            nextRGB = Variable(rgb[1:, :, :])
+            rgb = Variable(rgb[:-1, :, :])
+            nextFlow = Variable(flow[1:, :, :])
+            flow = Variable(flow[:-1, :, :])
+            target = [int(t) for t in target][:-1]
+            target = Variable(torch.LongTensor(target)).detach()
+            optimizer.zero_grad()
+            curFeature = twoStreamNetwork(rgb, flow)
+            twoStreamNetwork.reset_hidden()
+            nextFeature = twoStreamNetwork(nextRGB, nextFlow).detach()
+            actionFeature = actionClassifier(curFeature)
+            predictionLoss = mseLoss(curFeature, nextFeature)
+            recognitionLoss = nllLoss(actionFeature, target)
+            '''for i in range(1, rgb.size(0)):
                 curRGB = Variable(rgb[i-1].unsqueeze(0))#.cuda()
                 curFlow = Variable(flow[i-1].unsqueeze(0))#.cuda()
-                nextRGB = Variable(rgb[i].unsqueeze(0))#.cuda()
-                nextFlow = Variable(flow[i].unsqueeze(0))#.cuda()
+                nextRGB = Variable(rgb[i].unsqueeze(0)).detach()#.cuda()
+                nextFlow = Variable(flow[i].unsqueeze(0)).detach()#.cuda()
                 trainStep(curRGB, nextRGB, curFlow, nextFlow, target[i-1])
-            print(float(totalLoss)/rgb.size(0))
+            '''
+            jointLoss = recognitionLoss + LAMBDA * predictionLoss
+            print(jointLoss)
+            jointLoss.backward()
+            optimizer.step()
+            totalLoss += jointLoss.data.cpu().numpy()[0]
+            #print(float(totalLoss)/rgb.size(0))
             totalLoss = 0
         if epoch % 1 == 0:
             torch.save(twoStreamNetwork, 'models/twoStream_epoch%d.net'%epoch)
