@@ -16,6 +16,7 @@ def load_img(filepath):
     img = cv2.imread(filepath)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = img.astype('float')/255.0
+    img = cv2.resize(img, (224, 224))
     #img = cv2.normalize(img.astype('float'), None, 0.0, 1.0, cv2.NORM_MINMAX)
     return img
 
@@ -26,7 +27,7 @@ class CharadesLoader(data.Dataset):
         self.batch_size = 1
         self.fps = 24
         self.base_dir = base_dir
-        self.video_names = open(os.path.join(base_dir, '%s.txt'%split)).read().split('\n')
+        self.video_names = open(os.path.join(base_dir, '%s.txt'%split)).read().split('\n')[:-1]
         #self.video_names = [v.split('/')[-1] for v in glob(os.path.join(self.base_dir, 'Charades_v1_rgb', '*'))]
         self.input_transform = input_transform
         self.target_transform = target_transform
@@ -50,12 +51,14 @@ class CharadesLoader(data.Dataset):
         #flow_files = glob(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '*'))
         seq_len = len(rgb_files) // self.fps - 1
         h, w, _ = load_img(rgb_files[0]).shape
+        #h = w = 224
         rgb_tensor = torch.Tensor(seq_len, 3, h, w)
         flow_tensor = torch.Tensor(seq_len, 6, h, w)
         #frameNums = [(1+f) * self.fps for f in range(seq_len)]
         for i in range(seq_len):
             frameNum = (1+i) * self.fps
             rgb = load_img(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '%s-%06d.jpg' % (video_name, frameNum)))
+            #rgb = self.input_transform(rgb)
             rgb_tensor[i, 0, :, :] = torch.from_numpy(rgb[:, :, 0])
             rgb_tensor[i, 1, :, :] = torch.from_numpy(rgb[:, :, 1])
             rgb_tensor[i, 2, :, :] = torch.from_numpy(rgb[:, :, 2])
@@ -64,6 +67,8 @@ class CharadesLoader(data.Dataset):
                 flowy = load_img(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '%s-%06dy.jpg' % (video_name, flowNum)))
                 flowx = flowx[:, :, 0]#cv2.cvtColor(flowx, cv2.COLOR_BGR2GRAY)
                 flowy = flowy[:, :, 0]#cv2.cvtColor(flowy, cv2.COLOR_BGR2GRAY)
+                #flowx = self.input_transform(flowx)
+                #flowy = self.input_transform(flowy)
                 j = 2*(flowNum - (frameNum-1))
                 flow_tensor[i, j, :, :] = torch.from_numpy(flowx)
                 flow_tensor[i, j+1, :, :] = torch.from_numpy(flowy)
@@ -80,8 +85,8 @@ class CharadesLoader(data.Dataset):
             for i in range(s, min(e, seq_len)):
                 target[i] = a
         target = torch.Tensor(target)
-        if self.input_transform:
-            input = self.input_transform(input)
+        #if self.input_transform:
+        #    input = self.input_transform(input)
         if self.target_transform:
             target = self.target_transform(target)
         return input, target

@@ -1,5 +1,5 @@
 import torch
-from torchvision import models
+from torchvision import models, transforms
 from torch import nn, optim
 from torch.nn import MSELoss, KLDivLoss, NLLLoss, CrossEntropyLoss
 from dataset import CharadesLoader
@@ -11,7 +11,7 @@ from torch.nn import LSTM
 NUM_ACTIONS = 157 + 1
 FEATURE_SIZE = 2048#4096
 
-LAMBDA = 1#0.3
+LAMBDA = 0#0.3
 epochs = 50
 
 # TODO: Try lstm
@@ -35,7 +35,7 @@ class TwoStreamNetwork(nn.Module):
         model = models.resnet18(pretrained=True)
         model.fc = nn.Sequential()
         model.avgpool = nn.AvgPool2d(5, 5)
-        model.fc.add_module('embedding', nn.Linear(1024, FEATURE_SIZE))
+        model.fc.add_module('embedding', nn.Linear(512, FEATURE_SIZE))
         self.RGBStream = deepcopy(model)
         self.FlowStream = deepcopy(model)
         self.FlowStream.conv1 = nn.Conv2d(6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
@@ -52,7 +52,10 @@ optimizer = optim.Adam([{'params': twoStreamNetwork.parameters()}, {'params': ac
 for p in actionClassifier.parameters():
     clip_grad(p, -1, 1)
 
-train_loader = CharadesLoader('.', split="train")
+train_loader = CharadesLoader('.', split="train", 
+    input_transform = transforms.Compose([
+        transforms.Scale(224),
+    ]))
 val_loader = CharadesLoader('.', split="val")
 
 kldivLoss = KLDivLoss()
@@ -76,7 +79,7 @@ def trainStep(curRGB, nextRGB, curFlow, nextFlow, target):
     # Maybe use KL-divergence
     #predictionLoss = kldivLoss(F.softmax(curFeature),  F.softmax(nextFeature))
     predictionLoss = mseLoss(curFeature, nextFeature)
-    target = Variable(torch.LongTensor([int(target)])).cuda().detach()
+    target = Variable(torch.LongTensor([int(target)]), volatile=True).cuda().detach()
     recognitionLoss = nllLoss(actionFeature, target)
     _, action = torch.max(actionFeature, 1)
     #print(action.data.cpu().numpy()[0], target.data.cpu().numpy()[0])
@@ -96,25 +99,30 @@ def train():
             for i in range(1, rgb.size(0)):
                 curRGB = Variable(rgb[i-1].unsqueeze(0)).cuda()
                 curFlow = Variable(flow[i-1].unsqueeze(0)).cuda()
-                nextRGB = Variable(rgb[i].unsqueeze(0)).cuda()
-                nextFlow = Variable(flow[i].unsqueeze(0)).cuda()
+                nextRGB = Variable(rgb[i].unsqueeze(0), volatile=True).cuda()
+                nextFlow = Variable(flow[i].unsqueeze(0), volatile=True).cuda()
                 trainStep(curRGB, nextRGB, curFlow, nextFlow, target[i-1])
             print(float(totalLoss)/rgb.size(0))
             totalLoss = 0
+            if batch_idx % 5000 == 1:
+                print('Intermediate testing: ')
+                test(intermediate=True)
         if epoch % 1 == 0:
+            #torch.save(twoStreamNetwork, 'models/twostream%d.net'%epoch)
+            #torch.save(actionClassifier, 'models/actionClassifier%d.net'%epoch)
             #torch.save({'net': twoStreamNetwork, 'linear': actionClassifier}, 'models/epoch%d.net'%epoch)
             print('Test epoch %d:' % epoch)
-            test()
+            test(intermediate=True)
 
-def test():
+def test(intermediate=False):
     corr = 0
     for batch_idx, (data, target) in enumerate(val_loader):
-        #if batch_idx == 200:
-        #    break
+        if batch_idx == 200:
+            break
         (curRGB, curFlow) = data
-        curRGB = Variable(curRGB).cuda()
-        curFlow = Variable(curFlow).cuda()
-        target = Variable(target).cuda()
+        curRGB = Variable(curRGB, volatile=True).cuda()
+        curFlow = Variable(curFlow, volatile=True).cuda()
+        target = Variable(target, volatile=True).cuda()
         curFeature = twoStreamNetwork(curRGB, curFlow)
         actionFeature = actionClassifier(curFeature)
         _, action = torch.max(actionFeature, 1)

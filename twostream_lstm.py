@@ -9,7 +9,8 @@ import torch.nn.functional as F
 from torch.nn import LSTM
 
 NUM_ACTIONS = 157 + 1
-FEATURE_SIZE = 2048#4096
+FEATURE_SIZE = 256#2048#4096
+HIDDEN_SIZE = 100
 
 LAMBDA = 0#0.3
 epochs = 50
@@ -35,16 +36,16 @@ class TwoStreamNetwork(nn.Module):
         model = models.resnet18(pretrained=True)
         model.fc = nn.Sequential()
         model.avgpool = nn.AvgPool2d(5, 5)
-        model.fc.add_module('embedding', nn.Linear(1024, FEATURE_SIZE))
+        model.fc.add_module('embedding', nn.Linear(512, FEATURE_SIZE))
         self.RGBStream = deepcopy(model)
         self.FlowStream = deepcopy(model)
         self.FlowStream.conv1 = nn.Conv2d(6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         resetModel(self.FlowStream)
-        self.hidden_size = FEATURE_SIZE
+        self.hidden_size = HIDDEN_SIZE 
         self.lstm = torch.nn.LSTM(FEATURE_SIZE*2, self.hidden_size, 2, bidirectional=True)
         
     def reset_hidden(self, batch=1):
-        self.h = (Variable(torch.zeros(2*2, batch, self.hidden_size)), Variable(torch.zeros(2*2, batch, self.hidden_size)))
+        self.h = (Variable(torch.zeros(2*2, batch, self.hidden_size)).cuda(), Variable(torch.zeros(2*2, batch, self.hidden_size)).cuda())
     
     def forward(self, rgb, flow):
         feat = torch.cat([self.RGBStream(rgb), self.FlowStream(flow)], dim=1)
@@ -55,8 +56,8 @@ class TwoStreamNetwork(nn.Module):
         return out.squeeze(1)
 
 
-twoStreamNetwork = TwoStreamNetwork()#.cuda()
-actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)#.cuda()
+twoStreamNetwork = TwoStreamNetwork().cuda()
+actionClassifier = nn.Linear(HIDDEN_SIZE*2, NUM_ACTIONS).cuda()
 for p in actionClassifier.parameters():
     clip_grad(p, -1, 1)
 optimizer = optim.Adam([{'params': twoStreamNetwork.parameters()}, {'params': actionClassifier.parameters()}], lr=0.001)
@@ -79,8 +80,8 @@ def trainStep(curRGB, nextRGB, curFlow, nextFlow, target):
         nextFlow - Optical flow frames around nextRGB
     '''
     optimizer.zero_grad()
-    nextFeature = twoStreamNetwork(nextRGB, nextFlow).detach()
-    curFeature = twoStreamNetwork(curRGB, curFlow)
+    nextFeature = twoStreamNetwork(nextRGB, nextFlow).detach().cuda()
+    curFeature = twoStreamNetwork(curRGB, curFlow).cuda()
     actionFeature = actionClassifier(curFeature)
     # Maybe use KL-divergence
     #predictionLoss = kldivLoss(F.softmax(curFeature),  F.softmax(nextFeature))
@@ -102,13 +103,15 @@ def train():
         print('Training for epoch %d' % (epoch))
         for batch_idx, (data, target) in enumerate(train_loader):
             (rgb, flow) = data
+            if rgb.size(0) <= 1:
+                continue
             twoStreamNetwork.reset_hidden()
-            nextRGB = Variable(rgb[1:, :, :])
-            rgb = Variable(rgb[:-1, :, :])
-            nextFlow = Variable(flow[1:, :, :])
-            flow = Variable(flow[:-1, :, :])
+            nextRGB = Variable(rgb[1:, :, :]).cuda().detach()
+            rgb = Variable(rgb[:-1, :, :]).cuda()
+            nextFlow = Variable(flow[1:, :, :]).cuda().detach()
+            flow = Variable(flow[:-1, :, :]).cuda()
             target = [int(t) for t in target][:-1]
-            target = Variable(torch.LongTensor(target)).detach()
+            target = Variable(torch.LongTensor(target)).detach().cuda()
             optimizer.zero_grad()
             curFeature = twoStreamNetwork(rgb, flow)
             twoStreamNetwork.reset_hidden()
@@ -124,7 +127,7 @@ def train():
                 trainStep(curRGB, nextRGB, curFlow, nextFlow, target[i-1])
             '''
             jointLoss = recognitionLoss + LAMBDA * predictionLoss
-            print(jointLoss)
+            #print(jointLoss)
             jointLoss.backward()
             optimizer.step()
             totalLoss += jointLoss.data.cpu().numpy()[0]
@@ -141,9 +144,9 @@ def test():
         #if batch_idx == 200:
         #    break
         (curRGB, curFlow) = data
-        curRGB = Variable(curRGB)#.cuda()
-        curFlow = Variable(curFlow)#.cuda()
-        target = Variable(target)#.cuda()
+        curRGB = Variable(curRGB, volatile=True).cuda()
+        curFlow = Variable(curFlow, volatile=True).cuda()
+        target = Variable(target, volatile=True).cuda()
         curFeature = twoStreamNetwork(curRGB, curFlow)
         actionFeature = actionClassifier(curFeature)
         _, action = torch.max(actionFeature, 1)
