@@ -15,7 +15,7 @@ def load_img(filepath):
     #y, _, _ = img.split()
     img = cv2.imread(filepath)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    img = img.astype('float')/255.0
+    img = img.astype('float32')/255.0
     img = cv2.resize(img, (224, 224))
     #img = cv2.normalize(img.astype('float'), None, 0.0, 1.0, cv2.NORM_MINMAX)
     return img
@@ -50,6 +50,7 @@ class CharadesLoader(data.Dataset):
         rgb_files = glob(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '*'))
         #flow_files = glob(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '*'))
         seq_len = len(rgb_files) // self.fps - 1
+        seq_len = min(64, seq_len) # Cap sequence length
         h, w, _ = load_img(rgb_files[0]).shape
         #h = w = 224
         rgb_tensor = torch.Tensor(seq_len, 3, h, w)

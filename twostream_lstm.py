@@ -15,8 +15,6 @@ HIDDEN_SIZE = 100
 LAMBDA = 0#0.3
 epochs = 50
 
-# TODO: Try lstm
-
 
 def resetModel(m):
     if len(m._modules) == 0 and hasattr(m, 'reset_parameters'):
@@ -60,10 +58,14 @@ twoStreamNetwork = TwoStreamNetwork().cuda()
 actionClassifier = nn.Linear(HIDDEN_SIZE*2, NUM_ACTIONS).cuda()
 for p in actionClassifier.parameters():
     clip_grad(p, -1, 1)
-optimizer = optim.Adam([{'params': twoStreamNetwork.parameters()}, {'params': actionClassifier.parameters()}], lr=0.001)
+optimizer = optim.Adam([
+        {'params': twoStreamNetwork.parameters()}, 
+        {'params': actionClassifier.parameters()}], lr=0.001)
 
-train_loader = CharadesLoader('.', split="train")
-val_loader = CharadesLoader('.', split="val")
+kwargs = {'num_workers': 1, 'pin_memory': True}
+
+train_loader = torch.utils.data.DataLoader(CharadesLoader('.', split="train"), **kwargs)
+
 
 kldivLoss = KLDivLoss()
 mseLoss = MSELoss()
@@ -103,6 +105,9 @@ def train():
         print('Training for epoch %d' % (epoch))
         for batch_idx, (data, target) in enumerate(train_loader):
             (rgb, flow) = data
+            rgb = rgb.squeeze(0)
+            flow = flow.squeeze(0)
+            target = target[0]
             if rgb.size(0) <= 1:
                 continue
             twoStreamNetwork.reset_hidden()
@@ -131,19 +136,26 @@ def train():
             jointLoss.backward()
             optimizer.step()
             totalLoss += jointLoss.data.cpu().numpy()[0]
-            #print(float(totalLoss)/rgb.size(0))
+            print(batch_idx, float(jointLoss.data.cpu().numpy()[0])/rgb.size(0))
             totalLoss = 0
+            if batch_idx % 1000 == 0:
+                print('Intermediate test %d:' % batch_idx)
+                test(intermediate=True)
         if epoch % 1 == 0:
-            torch.save(twoStreamNetwork, 'models/twoStream_epoch%d.net'%epoch)
+            #torch.save(twoStreamNetwork, 'models/twoStream_epoch%d.net'%epoch)
             print('Test epoch %d:' % epoch)
             test()
 
-def test():
+def test(intermediate=False):
+    val_loader = torch.utils.data.DataLoader(CharadesLoader('.', split="val"), **kwargs)
     corr = 0
     for batch_idx, (data, target) in enumerate(val_loader):
-        #if batch_idx == 200:
-        #    break
+        if intermediate and batch_idx == 200:
+            break
         (curRGB, curFlow) = data
+        curRGB = curRGB.squeeze(0)
+        curFlow = curFlow.squeeze(0)
+        target = target[0]
         curRGB = Variable(curRGB, volatile=True).cuda()
         curFlow = Variable(curFlow, volatile=True).cuda()
         target = Variable(target, volatile=True).cuda()
