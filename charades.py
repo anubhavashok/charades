@@ -52,7 +52,7 @@ nllLoss = NLLLoss()
 ceLoss = CrossEntropyLoss()
 
 def train():
-    train_loader = torch.utils.data.DataLoader(CharadesLoader('/mnt/sdb1/anubhava', split="train"), shuffle=True, **kwargs)
+    train_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="train"), shuffle=True, **kwargs)
     for epoch in range(EPOCHS):
         print('Training for epoch %d' % (epoch))
         for batch_idx, (data, target) in enumerate(train_loader):
@@ -92,7 +92,7 @@ def train():
 
 def test(intermediate=False):
     corr = 0
-    val_loader = torch.utils.data.DataLoader(CharadesLoader('/mnt/sdb1/anubhava', split="val"))
+    val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val"))
     for batch_idx, (data, target) in enumerate(val_loader):
         if intermediate and batch_idx == 200:
             break

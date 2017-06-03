@@ -1,3 +1,5 @@
+DATASET_PATH='/mnt/sdb1/anubhava/'
+
 # Constants
 NUM_ACTIONS=157 + 1
 EPOCHS=50
