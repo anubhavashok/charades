@@ -88,6 +88,9 @@ def train():
                 print('Intermediate testing: ', test(intermediate=True))
         if epoch % TEST_FREQ == 0:
             print('Test epoch %d:' % epoch)
+            torch.save({'net': net,
+                        'classifier': actionClassifier
+                       }, 'checkpoints/checkpoint%d.net' % epoch)
             test()
 
 def test(intermediate=False):
