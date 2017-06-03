@@ -11,6 +11,16 @@ from pycrayon import CrayonClient
 from config import *
 from utils import *
 
+import argparse
+parser = argparse.ArgumentParser(description='Lets win charades')
+parser.add_argument('-name', type=str, required=False, default="No name provided",
+                    help='Name of experiment')
+
+args = parser.parse_args()
+print(args.name)
+
+if USE_GPU:
+    torch.cuda.set_device(TORCH_DEVICE)
 cc = None
 if LOG:
     os.system('')
@@ -25,8 +35,8 @@ else:
     net = TwoStreamNetwork()
 
 actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
+#actionClassifier = nn.Linear(FEATURE_SIZE//4, NUM_ACTIONS)
 if USE_GPU:
-    torch.cuda.device(TORCH_DEVICE)
     net = net.cuda()
     actionClassifier = actionClassifier.cuda()
 
