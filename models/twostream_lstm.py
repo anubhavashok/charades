@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.autograd import Variable
 from copy import deepcopy
 from torchvision import models
 from utils import *
@@ -7,11 +8,15 @@ from config import *
 
 class TwoStreamNetworkLSTM(nn.Module):
     def __init__(self):
-        super(TwoStreamNetwork, self).__init__()
+        super(TwoStreamNetworkLSTM, self).__init__()
         model = models.resnet18(pretrained=True)
         model.fc = nn.Sequential()
         model.avgpool = nn.AvgPool2d(5, 5)
         model.fc.add_module('embedding', nn.Linear(512, FEATURE_SIZE))
+        model.layer1.add_module('2', nn.Dropout2d())
+        model.layer2.add_module('2', nn.Dropout2d())
+        model.layer3.add_module('2', nn.Dropout2d())
+        model.layer4.add_module('2', nn.Dropout2d())
         self.RGBStream = deepcopy(model)
         self.FlowStream = deepcopy(model)
         self.FlowStream.conv1 = nn.Conv2d(6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
@@ -23,6 +28,8 @@ class TwoStreamNetworkLSTM(nn.Module):
         self.h = (Variable(torch.zeros(2*2, batch, self.hidden_size)).cuda(), Variable(torch.zeros(2*2, batch, self.hidden_size)).cuda())
 
     def forward(self, rgb, flow):
+        # Since we are batching sequences we can reset each time
+        self.reset_hidden()
         feat = torch.cat([self.RGBStream(rgb), self.FlowStream(flow)], dim=1)
         feat = feat.unsqueeze(1)
         #print(feat.size(), self.h[0].size())
