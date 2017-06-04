@@ -27,14 +27,13 @@ if LOG:
     cc = CrayonClient(hostname="server_machine_address")
 
 if USE_LSTM:
-    CLIP_GRAD=True
     from models.twostream_lstm import TwoStreamNetworkLSTM
     net = TwoStreamNetworkLSTM()
+    actionClassifier = nn.Linear(HIDDEN_SIZE*2, NUM_ACTIONS)
 else:
     from models.twostream import TwoStreamNetwork
     net = TwoStreamNetwork()
-
-actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
+    actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
 #actionClassifier = nn.Linear(FEATURE_SIZE//4, NUM_ACTIONS)
 if USE_GPU:
     net = net.cuda()
@@ -55,13 +54,13 @@ if CLIP_GRAD:
 
 kwargs = {'num_workers': 1, 'pin_memory': True}
 
-
 kldivLoss = KLDivLoss()
 mseLoss = MSELoss()
 nllLoss = NLLLoss()
 ceLoss = CrossEntropyLoss()
 
 def train():
+    net.train()
     train_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="train"), shuffle=True, **kwargs)
     for epoch in range(EPOCHS):
         print('Training for epoch %d' % (epoch))
@@ -104,6 +103,7 @@ def train():
             test()
 
 def test(intermediate=False):
+    net.eval()
     corr = 0
     val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val"))
     for batch_idx, (data, target) in enumerate(val_loader):
