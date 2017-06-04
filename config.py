@@ -1,9 +1,9 @@
-DATASET_PATH='/mnt/sdb1/anubhava/'
+DATASET_PATH='../../charades/data'
 
 # Constants
 NUM_ACTIONS=157 + 1
 EPOCHS=50
-TORCH_DEVICE=1
+TORCH_DEVICE=0
 INTERMEDIATE_TEST=0
 TEST_FREQ=1
 LOG=False

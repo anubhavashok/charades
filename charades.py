@@ -6,7 +6,6 @@ from dataset import CharadesLoader
 from copy import deepcopy
 from torch.autograd import Variable
 import torch.nn.functional as F
-from pycrayon import CrayonClient
 
 from config import *
 from utils import *
@@ -23,6 +22,7 @@ if USE_GPU:
     torch.cuda.set_device(TORCH_DEVICE)
 cc = None
 if LOG:
+    from pycrayon import CrayonClient
     os.system('')
     cc = CrayonClient(hostname="server_machine_address")
 
@@ -35,6 +35,7 @@ else:
     net = TwoStreamNetwork()
     actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
 #actionClassifier = nn.Linear(FEATURE_SIZE//4, NUM_ACTIONS)
+
 if USE_GPU:
     net = net.cuda()
     actionClassifier = actionClassifier.cuda()

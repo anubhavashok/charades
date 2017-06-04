@@ -19,9 +19,11 @@ class TwoStreamNetwork(nn.Module):
         self.FlowStream = deepcopy(model)
         self.FlowStream._modules['conv1'] = nn.Conv2d(6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         resetModel(self.FlowStream)
+        self.pool = nn.AvgPool1d(8)
 
     def forward(self, rgb, flow):
         rgbout = self.RGBStream(rgb)
         flowout = self.FlowStream(flow)
         out = torch.cat([rgbout, flowout], dim=1)
+        out = self.pool(out.unsqueeze(0)).squeeze(0)
         return out
