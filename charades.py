@@ -35,7 +35,7 @@ else:
     from models.twostream import TwoStreamNetwork
     net = TwoStreamNetwork()
     actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
-    #actionClassifier = nn.Linear(FEATURE_SIZE//4, NUM_ACTIONS)
+
 if USE_GPU:
     net = net.cuda()
     actionClassifier = actionClassifier.cuda()
@@ -43,15 +43,15 @@ if USE_GPU:
 if OPTIMIZER == 'ADAM':
     optimizer = optim.Adam([
             {'params': net.parameters()}, 
-            {'params': actionClassifier.parameters()}], lr=LR)
+            {'params': actionClassifier.parameters()}], lr=LR, weight_decay=5e-4)
 elif OPTIMIZER == 'SGD':
     optimizer = optim.SGD([
             {'params': net.parameters()}, 
-            {'params': actionClassifier.parameters()}], lr=LR, momentum=MOMENTUM)
+            {'params': actionClassifier.parameters()}], lr=LR, momentum=MOMENTUM, weight_decay=5e-4)
 else:
     optimizer = optim.RMSprop([
             {'params': net.parameters()}, 
-            {'params': actionClassifier.parameters()}], lr=LR)
+            {'params': actionClassifier.parameters()}], lr=LR, weight_decay=5e-4)
 
 if CLIP_GRAD:
     for p in actionClassifier.parameters():

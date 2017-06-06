@@ -27,12 +27,12 @@ class CharadesLoader(data.Dataset):
         self.batch_size = 1
         self.fps = 24
         self.base_dir = base_dir
-        self.video_names = open(os.path.join(base_dir, '%s.txt'%split)).read().split('\n')[:-1]
+        self.video_names = open(os.path.join(base_dir, '../../anubhava/charades', '%s.txt'%split)).read().split('\n')[:-1]
         #self.video_names = [v.split('/')[-1] for v in glob(os.path.join(self.base_dir, 'Charades_v1_rgb', '*'))]
         self.input_transform = input_transform
         self.target_transform = target_transform
         self.actions = {}
-        f = open(os.path.join(base_dir, 'vu17_charades', 'Charades_vu17_%s.csv'%split))
+        f = open(os.path.join(base_dir, '../../anubhava/charades/vu17_charades', 'Charades_vu17_%s.csv'%split))
         reader = csv.DictReader(f)
         for row in reader:
             self.actions[row['id']] = [] 
