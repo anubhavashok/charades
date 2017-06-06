@@ -43,15 +43,15 @@ if USE_GPU:
 if OPTIMIZER == 'ADAM':
     optimizer = optim.Adam([
             {'params': net.parameters()}, 
-            {'params': actionClassifier.parameters()}], lr=LR)
+            {'params': actionClassifier.parameters()}], lr=LR, weight_decay=5e-4)
 elif OPTIMIZER == 'SGD':
     optimizer = optim.SGD([
             {'params': net.parameters()}, 
-            {'params': actionClassifier.parameters()}], lr=LR, momentum=MOMENTUM)
+            {'params': actionClassifier.parameters()}], lr=LR, momentum=MOMENTUM, weight_decay=5e-4)
 else:
     optimizer = optim.RMSprop([
             {'params': net.parameters()}, 
-            {'params': actionClassifier.parameters()}], lr=LR)
+            {'params': actionClassifier.parameters()}], lr=LR, weight_decay=5e-4)
 
 if CLIP_GRAD:
     for p in actionClassifier.parameters():
