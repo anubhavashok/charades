@@ -94,7 +94,7 @@ def train():
             actionFeature = actionClassifier(curFeature)
             if PREDICTION_LOSS == 'MSE':
                 predictionLoss = mseLoss(curFeature, nextFeature)
-            elif PREDICTION_LOSS = 'SMOOTHL1':
+            elif PREDICTION_LOSS == 'SMOOTHL1':
                 predictionLoss = smoothl1Loss(curFeature, nextFeature)
             else:
                 predictionLoss = kldivLoss(F.softmax(curFeature),  F.softmax(nextFeature))
