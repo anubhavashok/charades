@@ -6,7 +6,6 @@ from dataset import CharadesLoader
 from copy import deepcopy
 from torch.autograd import Variable
 import torch.nn.functional as F
-from pycrayon import CrayonClient
 
 from config import *
 from utils import *
@@ -22,6 +21,7 @@ if USE_GPU:
     torch.cuda.set_device(TORCH_DEVICE)
 cc = None
 if LOG:
+    from pycrayon import CrayonClient
     os.system('')
     cc = CrayonClient(hostname="server_machine_address")
 net = None
