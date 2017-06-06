@@ -73,10 +73,17 @@ class CharadesLoader(data.Dataset):
                 j = 2*(flowNum - (frameNum-1))
                 flow_tensor[i, j, :, :] = torch.from_numpy(flowx)
                 flow_tensor[i, j+1, :, :] = torch.from_numpy(flowy)
+        
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
-        normalizeFlow = transforms.Normalize(mean=[0.485],
-                                     std=[0.229])
+        flowflatx = (flow_tensor[:, 0, :, :]).contiguous().view(-1)
+        flowflaty = (flow_tensor[:, 1, :, :]).contiguous().view(-1)
+        flowstdx = torch.std(flowflatx)
+        flowmeanx = torch.mean(flowflatx)
+        flowstdy = torch.std(flowflaty)
+        flowmeany = torch.mean(flowflaty)
+        normalizeFlow = transforms.Normalize(mean=[flowmeanx, flowmeany]*3,
+                                     std=[flowstdx, flowstdy]*3)
         rgb_tensor = normalize(rgb_tensor)
         flow_tensor = normalizeFlow(flow_tensor)
         input = (rgb_tensor, flow_tensor)
