@@ -13,8 +13,7 @@ from utils import *
 
 import argparse
 parser = argparse.ArgumentParser(description='Lets win charades')
-parser.add_argument('-name', type=str, required=False, default="No name provided",
-                    help='Name of experiment')
+parser.add_argument('-name', type=str, required=False, default="No name provided", help='Name of experiment')
 
 args = parser.parse_args()
 print(args.name)
@@ -120,12 +119,27 @@ def top5acc(pred, target):
     acc = torch.mean(mn.float())
     return acc
 
+
+def writeTestScore(f, vid, scores):
+    # perform merging algorithm
+    score = scores[0].data.clone().fill_(0)
+    k = 0
+    for i in range(len(scores)):
+        _, j = torch.max(scores[i], 0)
+        if j != 157:
+            score += scores[i].data
+            k += 1
+    score /= k
+    score = score.cpu().numpy().tolist()[:-1]
+    f.write("%s %s\n" % (vid, ' '.join(map(str, score))))
+
 def test(intermediate=False):
     global actionClassifier
     global net
     net.eval()
     corr = 0
     t5cum = 0
+    f = open('results/testscores.txt', "w+")
     val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val"))
     for batch_idx, (data, target) in enumerate(val_loader):
         if intermediate and batch_idx == 200:
@@ -139,7 +153,8 @@ def test(intermediate=False):
         target = Variable(target, volatile=True).cuda()
         curFeature = net(curRGB, curFlow).detach()
         actionFeature = actionClassifier(curFeature).detach()
-        print(actionFeature)
+        vid = val_loader.dataset.video_names[batch_idx]
+        writeTestScore(f, vid, actionFeature)
         t5a = top5acc(actionFeature, target)
         t5cum += t5a
         _, action = torch.max(actionFeature, 1)
@@ -147,6 +162,7 @@ def test(intermediate=False):
         corr += (100. * correct) / curRGB.size(0)
     print(corr/(batch_idx))
     print('Top5: ', 100*t5cum/(batch_idx))
+    f.close()
     return (corr/(batch_idx), 100*t5cum/(batch_idx))
 
 if __name__ == "__main__":
