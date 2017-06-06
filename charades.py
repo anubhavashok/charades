@@ -1,7 +1,7 @@
 import torch
 from torchvision import transforms
 from torch import nn, optim
-from torch.nn import MSELoss, KLDivLoss, NLLLoss, CrossEntropyLoss
+from torch.nn import MSELoss, KLDivLoss, NLLLoss, CrossEntropyLoss, SmoothL1Loss
 from dataset import CharadesLoader
 from copy import deepcopy
 from torch.autograd import Variable
@@ -63,6 +63,7 @@ kldivLoss = KLDivLoss()
 mseLoss = MSELoss()
 nllLoss = NLLLoss()
 ceLoss = CrossEntropyLoss()
+smoothl1Loss = SmoothL1Loss()
 
 def train():
     global actionClassifier
@@ -93,6 +94,8 @@ def train():
             actionFeature = actionClassifier(curFeature)
             if PREDICTION_LOSS == 'MSE':
                 predictionLoss = mseLoss(curFeature, nextFeature)
+            elif PREDICTION_LOSS = 'SMOOTHL1':
+                predictionLoss = smoothl1Loss(curFeature, nextFeature)
             else:
                 predictionLoss = kldivLoss(F.softmax(curFeature),  F.softmax(nextFeature))
             _, action = torch.max(actionFeature, 1)
