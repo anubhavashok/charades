@@ -46,7 +46,6 @@ class CharadesLoader(data.Dataset):
                 self.actions[row['id']].append([a, s, e])
 
     def __getitem__(self, index):
-        print(index)
         video_name = self.video_names[index]
         rgb_files = glob(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '*'))
         #flow_files = glob(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '*'))
