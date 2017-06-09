@@ -6,9 +6,11 @@ from dataset import CharadesLoader
 from copy import deepcopy
 from torch.autograd import Variable
 import torch.nn.functional as F
+from torchnet import meter
 
 from config import *
 from utils import *
+import numpy as np
 
 import argparse
 parser = argparse.ArgumentParser(description='Lets win charades')
@@ -28,13 +30,21 @@ net = None
 actionClassifier = None
 optimizer = None
 if USE_LSTM:
-    from models.twostream_lstm import TwoStreamNetworkLSTM
+    from models.vgg_twostream_lstm import TwoStreamNetworkLSTM
     net = TwoStreamNetworkLSTM()
-    actionClassifier = nn.Linear(HIDDEN_SIZE*2, NUM_ACTIONS)
+    #actionClassifier = nn.Linear(HIDDEN_SIZE*2, NUM_ACTIONS)
+    actionClassifier = nn.Sequential(
+        nn.Linear(HIDDEN_SIZE*2, FEATURE_SIZE),
+        nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
+    )
 else:
-    from models.twostream import TwoStreamNetwork
+    from models.vgg_twostream import TwoStreamNetwork
     net = TwoStreamNetwork()
-    actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
+    actionClassifier = nn.Sequential(
+        nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE),
+        nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
+    )
+    #actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
 
 if USE_GPU:
     net = net.cuda()
@@ -61,8 +71,8 @@ kwargs = {'num_workers': 1, 'pin_memory': True}
 
 kldivLoss = KLDivLoss()
 mseLoss = MSELoss()
-nllLoss = NLLLoss()
-ceLoss = CrossEntropyLoss()
+nllLoss = NLLLoss(weight=invClassWeightstensor.cuda())
+ceLoss = CrossEntropyLoss(weight=invClassWeightstensor.cuda())
 smoothl1Loss = SmoothL1Loss()
 
 def train():
@@ -88,7 +98,6 @@ def train():
             flow = flow[:-1, :, :]
             flow = Variable(flow).cuda()
             target = Variable(target[:-1].long(), requires_grad=False).cuda().detach()
-            optimizer.zero_grad()
             curFeature = net(rgb, flow)
             nextFeature = net(nextRGB, nextFlow).detach()
             actionFeature = actionClassifier(curFeature)
@@ -97,12 +106,17 @@ def train():
             elif PREDICTION_LOSS == 'SMOOTHL1':
                 predictionLoss = smoothl1Loss(curFeature, nextFeature)
             else:
-                predictionLoss = kldivLoss(F.softmax(curFeature),  F.softmax(nextFeature))
+                predictionLoss = kldivLoss(F.log_softmax(curFeature),  F.log_softmax(nextFeature))
             _, action = torch.max(actionFeature, 1)
-            recognitionLoss = ceLoss(actionFeature, target)
+            #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
+            recognitionLoss = nllLoss(F.log_softmax(actionFeature), target)
+            #recognitionLoss = ceLoss(actionFeature, target)
+            #print(F.log_softmax(curFeature), F.log_softmax(nextFeature))
             jointLoss = recognitionLoss + LAMBDA * predictionLoss
             jointLoss.backward()
-            optimizer.step()
+            if batch_idx % 8 == 0:
+                optimizer.step()
+                optimizer.zero_grad()
             print(batch_idx, float(jointLoss.data.cpu().numpy()[0]))
             if INTERMEDIATE_TEST and (batch_idx+1) % INTERMEDIATE_TEST == 0:
                 print('Intermediate testing: ', test(intermediate=True))
@@ -113,30 +127,9 @@ def train():
             #           }, 'checkpoints/checkpoint%d.net' % epoch)
             test()
 
-def top5acc(pred, target):
-    pred = pred.cpu()
-    target = target.cpu()
-    _, i = torch.topk(pred, 5, dim=1)
-    i = i.type_as(target)
-    mn, _ = torch.max(i.eq(target.repeat(5, 1).t()), dim=1)
-    acc = torch.mean(mn.float())
-    return acc
-
-
-def writeTestScore(f, vid, scores):
-    # perform merging algorithm
-    score = scores[0].data.clone().fill_(0)
-    k = 0
-    for i in range(len(scores)):
-        _, j = torch.max(scores[i], 0)
-        if j != 157:
-            score += scores[i].data
-            k += 1
-    score /= k
-    score = score.cpu().numpy().tolist()[:-1]
-    f.write("%s %s\n" % (vid, ' '.join(map(str, score))))
-
 def test(intermediate=False):
+    mtr = meter.ConfusionMeter(k=NUM_ACTIONS)
+    mapmtr = meter.mAPMeter()
     global actionClassifier
     global net
     net.eval()
@@ -158,11 +151,18 @@ def test(intermediate=False):
         actionFeature = actionClassifier(curFeature).detach()
         vid = val_loader.dataset.video_names[batch_idx]
         writeTestScore(f, vid, actionFeature)
+        mtr.add(actionFeature.data, target.data)
+        #mapmtr.add(actionFeature.data, target.data.cpu().numpy())
+        mapmtr.add(actionFeature.data, one_hot((len(target), NUM_ACTIONS), target.data))
         t5a = top5acc(actionFeature, target)
         t5cum += t5a
         _, action = torch.max(actionFeature, 1)
         correct = target.eq(action.type_as(target)).sum().data.cpu().numpy()
         corr += (100. * correct) / curRGB.size(0)
+    #np.savetxt('cmatrix.txt', mtr.value(), fmt="%.2e")
+    print(mapmtr.value())
+    print(mtr.value())
+    #plot_confusion_matrix(mtr.value(), [])
     print(corr/(batch_idx))
     print('Top5: ', 100*t5cum/(batch_idx))
     f.close()
