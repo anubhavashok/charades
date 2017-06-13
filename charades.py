@@ -1,7 +1,7 @@
 import torch
 from torchvision import transforms
 from torch import nn, optim
-from torch.nn import MSELoss, KLDivLoss, NLLLoss, CrossEntropyLoss, SmoothL1Loss
+from torch.nn import MSELoss, KLDivLoss, NLLLoss, CrossEntropyLoss, SmoothL1Loss, MultiLabelSoftMarginLoss
 from dataset import CharadesLoader
 from copy import deepcopy
 from torch.autograd import Variable
@@ -73,6 +73,7 @@ kldivLoss = KLDivLoss()
 mseLoss = MSELoss()
 nllLoss = NLLLoss(weight=invClassWeightstensor.cuda())
 ceLoss = CrossEntropyLoss(weight=invClassWeightstensor.cuda())
+mlsml = MultiLabelSoftMarginLoss()
 smoothl1Loss = SmoothL1Loss()
 
 def train():
@@ -109,9 +110,10 @@ def train():
                 predictionLoss = kldivLoss(F.log_softmax(curFeature),  F.log_softmax(nextFeature))
             _, action = torch.max(actionFeature, 1)
             #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
-            recognitionLoss = nllLoss(F.log_softmax(actionFeature), target)
+            #recognitionLoss = nllLoss(F.log_softmax(actionFeature), target)
             #recognitionLoss = ceLoss(actionFeature, target)
             #print(F.log_softmax(curFeature), F.log_softmax(nextFeature))
+            recognitionLoss = mlsml(actionFeature, target.float())
             jointLoss = recognitionLoss + LAMBDA * predictionLoss
             jointLoss.backward()
             if batch_idx % 8 == 0:
@@ -154,9 +156,12 @@ def test(intermediate=False):
         mtr.add(actionFeature.data, target.data)
         #mapmtr.add(actionFeature.data, target.data.cpu().numpy())
         mapmtr.add(actionFeature.data, one_hot((len(target), NUM_ACTIONS), target.data))
-        t5a = top5acc(actionFeature, target)
+        #t5a = top5acc(actionFeature, target)
+        t5a = 0
         t5cum += t5a
+        _, target = torch.max(target, 1)
         _, action = torch.max(actionFeature, 1)
+        print(action.size(), target.size())
         correct = target.eq(action.type_as(target)).sum().data.cpu().numpy()
         corr += (100. * correct) / curRGB.size(0)
     #np.savetxt('cmatrix.txt', mtr.value(), fmt="%.2e")

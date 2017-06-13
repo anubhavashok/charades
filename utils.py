@@ -73,6 +73,12 @@ def writeTestScore(f, vid, scores):
     score = scores[-1].data.cpu().numpy().tolist()[:-1]
     f.write("%s %s\n" % (vid, ' '.join(map(str, score))))
 
+def removeEmptyFromTensor(input, target):
+    mask = target.sum(1) > 0
+    mask = mask.squeeze().nonzero().squeeze()
+    target = target.index_select(0, mask)
+    input = (input[0].index_select(0, mask), input[1].index_select(0, mask))
+    return input, target
 
 def one_hot(size, index):
     """ Creates a matrix of one hot vectors.
