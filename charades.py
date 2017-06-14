@@ -35,6 +35,7 @@ if USE_LSTM:
     #actionClassifier = nn.Linear(HIDDEN_SIZE*2, NUM_ACTIONS)
     actionClassifier = nn.Sequential(
         nn.Linear(HIDDEN_SIZE*2, FEATURE_SIZE),
+        nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
     )
 else:
@@ -42,6 +43,7 @@ else:
     net = TwoStreamNetwork()
     actionClassifier = nn.Sequential(
         nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE),
+        nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
     )
     #actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
@@ -130,8 +132,10 @@ def train():
             test()
 
 def test(intermediate=False):
-    mtr = meter.ConfusionMeter(k=NUM_ACTIONS)
-    mapmtr = meter.mAPMeter()
+    #mtr = meter.ConfusionMeter(k=NUM_ACTIONS)
+    #mapmtr = meter.mAPMeter()
+    outputs = []
+    targets = []
     global actionClassifier
     global net
     net.eval()
@@ -140,6 +144,7 @@ def test(intermediate=False):
     f = open('results/testscores.txt', "w+")
     val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val"))
     for batch_idx, (data, target) in enumerate(val_loader):
+        print(batch_idx)
         if intermediate and batch_idx == 200:
             break
         (curRGB, curFlow) = data
@@ -153,23 +158,30 @@ def test(intermediate=False):
         actionFeature = actionClassifier(curFeature).detach()
         vid = val_loader.dataset.video_names[batch_idx]
         writeTestScore(f, vid, actionFeature)
-        mtr.add(actionFeature.data, target.data)
+        #mtr.add(actionFeature.data, target.data)
         #mapmtr.add(actionFeature.data, target.data.cpu().numpy())
-        mapmtr.add(actionFeature.data, one_hot((len(target), NUM_ACTIONS), target.data))
+        #mapmtr.add(actionFeature.data, target.data, target.data)
         #t5a = top5acc(actionFeature, target)
         t5a = 0
         t5cum += t5a
-        _, target = torch.max(target, 1)
+        _, target_m = torch.max(target, 1)
         _, action = torch.max(actionFeature, 1)
-        print(action.size(), target.size())
-        correct = target.eq(action.type_as(target)).sum().data.cpu().numpy()
+        outputs.append(np.mean(actionFeature.data.cpu().numpy(), 0))
+        targets.append(np.max(target.data.cpu().numpy(), 0))
+        correct = target_m.eq(action.type_as(target_m)).sum().data.cpu().numpy()
         corr += (100. * correct) / curRGB.size(0)
     #np.savetxt('cmatrix.txt', mtr.value(), fmt="%.2e")
-    print(mapmtr.value())
-    print(mtr.value())
+    #print(mapmtr.value())
+    #print(mtr.value())
     #plot_confusion_matrix(mtr.value(), [])
-    print(corr/(batch_idx))
-    print('Top5: ', 100*t5cum/(batch_idx))
+    #print(corr/(batch_idx))
+    outputs = np.array(outputs)
+    outputs = np.exp(outputs)
+    outputs = np.divide(outputs, np.expand_dims(outputs.sum(1), axis=1))
+    targets = np.array(targets)
+    ap = charades_ap(outputs, targets)
+    print('mAP', np.mean(ap))
+    #print('Top5: ', 100*t5cum/(batch_idx))
     f.close()
     return (corr/(batch_idx), 100*t5cum/(batch_idx))
 
