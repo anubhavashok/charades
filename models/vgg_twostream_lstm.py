@@ -11,8 +11,8 @@ class TwoStreamNetworkLSTM(nn.Module):
         super(TwoStreamNetworkLSTM, self).__init__()
         model = models.vgg11(pretrained=True)
         model.features._modules['2'] = nn.MaxPool2d((4, 4), stride=(4, 4), dilation=(1, 1))
-        model.classifier._modules['0'] = nn.Linear(4608, 512)
-        model.classifier._modules['6'] = nn.Linear(512, FEATURE_SIZE)
+        model.classifier._modules['0'] = nn.Linear(4608, 1024)
+        model.classifier._modules['6'] = nn.Linear(1024, FEATURE_SIZE)
         del model.classifier._modules['2']
         del model.classifier._modules['3']
         del model.classifier._modules['4']
