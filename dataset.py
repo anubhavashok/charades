@@ -18,6 +18,8 @@ def load_img(filepath, transforms=None):
         img = self.transform(img)
     return img
 
+
+
 trainImgTransforms = transforms.Compose([
     transforms.RandomSizedCrop(224),
     transforms.RandomHorizontalFlip(),
@@ -30,10 +32,24 @@ trainFlowTransforms = transforms.Compose([
     transforms.ToTensor()
 ])
 
+Crop = None
+if TEST_CROP_MODE == 'CenterCrop':
+    Crop = transforms.CenterCrop
+else:
+    Crop = transforms.RandomCrop
+
+valTransforms = transforms.Compose([
+    transforms.Scale(256),
+    Crop(224),
+    transforms.ToTensor()
+])
+
+
 
 class CharadesLoader(data.Dataset):
     def __init__(self, base_dir, input_transform=None, target_transform=None, fps=25, split='train'):
         super(CharadesLoader, self).__init__()
+        self.split = split
         self.batch_size = 1
         self.fps = 24
         self.base_dir = base_dir
@@ -76,7 +92,7 @@ class CharadesLoader(data.Dataset):
         for i in range(seq_len):
             frameNum = (1+i) * self.fps
             rgb = load_img(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '%s-%06d.jpg' % (video_name, frameNum)))
-            rgb = trainImgTransforms(rgb)
+            rgb = trainImgTransforms(rgb) if self.split == 'train' else valTransforms(rgb)
             rgb_tensor[i] = rgb
             for flowNum in range(frameNum-1, frameNum+2):
                 flowx = load_img(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '%s-%06dx.jpg' % (video_name, flowNum)))
@@ -84,7 +100,7 @@ class CharadesLoader(data.Dataset):
                 flowx, _, _ = flowx.split()
                 flowy, _, _ = flowy.split()
                 flowImage = Image.merge("RGB", [flowx,flowy,flowx])
-                flowImage = trainFlowTransforms(flowImage)
+                flowImage = trainFlowTransforms(flowImage) if self.split == 'train' else valTransforms(flowImage)
                 flowImage = flowImage[0:2, :, :]
                 j = 2*(flowNum - (frameNum-1))
                 flow_tensor[i, j:j+2] = flowImage
