@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import itertools
 from torch.autograd import Variable
+from torch.nn.modules.loss import _WeightedLoss
+from torch.nn import MSELoss
 
 def top5acc(pred, target):
     pred = pred.cpu()
@@ -103,3 +105,15 @@ classweights = [0.015058585786963999, 0.010392108202010175, 0.008189601687554287
 invclassweights = [1/ii for ii in classweights]
 invclassweights = [ii/sum(invclassweights) for ii in invclassweights]
 invClassWeightstensor = torch.FloatTensor(invclassweights)
+
+
+class TripletLoss(_WeightedLoss):
+    def __init__(self):
+        super(TripletLoss, self).__init__()
+        self.mseLoss = MSELoss()
+        self.alpha = 1
+    
+    def forward(self, inp, positive, negative):
+        loss = self.mseLoss(inp, positive) - self.mseLoss(inp, negative) + self.alpha
+        return loss
+
