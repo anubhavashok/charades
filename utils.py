@@ -123,3 +123,33 @@ class TripletLoss(_WeightedLoss):
         loss = self.mseLoss(inp, positive) - self.mseLoss(inp, negative) + self.alpha
         return loss
 
+def mAP(conf, gt):
+    sortind = np.argsort(conf, axis=0)[::-1]
+    so = np.sort(conf, axis=0)[::-1]
+    tp = (gt[sortind] == 1).astype(int)
+    fp = (gt[sortind] == 0).astype(int)    
+    tmp = tp.copy().flatten()
+    npos = tp.sum()
+    fp = np.cumsum(fp)
+    tp = np.cumsum(tp)
+    rec = tp/float(npos)
+    prec = np.divide(tp.astype(float),(fp+tp).astype(float))
+    ap = 0
+    for i in range(conf.shape[0]):
+        if tmp[i]==1:
+            ap = ap+prec[i]
+    npos = max(npos, 1)
+    ap = float(ap)/float(npos)
+    #ap[np.isnan(ap)] = 0
+    return rec, prec, ap
+
+
+
+def charades_ap(conf, gt):
+    for i in range(gt.shape[0]):
+        if gt.sum() == 0:
+            conf[i] = -inf
+    ap = np.array([0.0]*157)
+    for i in range(ap.shape[0]):
+        _, _, ap[i] = mAP(conf[:, i], gt[:, i])
+    return ap
