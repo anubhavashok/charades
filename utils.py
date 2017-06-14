@@ -71,8 +71,8 @@ def writeTestScore(f, vid, scores):
             score += scores[i].data
             k += 1
     score /= k
-    score = score.cpu().numpy().tolist()[:-1]
-    score = scores[-1].data.cpu().numpy().tolist()[:-1]
+    score = score.cpu().numpy().tolist()[:157]
+    score = scores[-1].data.cpu().numpy().tolist()[:157]
     f.write("%s %s\n" % (vid, ' '.join(map(str, score))))
 
 def removeEmptyFromTensor(input, target):

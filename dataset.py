@@ -9,6 +9,9 @@ from PIL import Image
 import cv2
 import csv
 from glob import glob
+import numpy as np
+import random
+
 from config import *
 from utils import *
 
@@ -17,8 +20,6 @@ def load_img(filepath, transforms=None):
     if transforms:
         img = self.transform(img)
     return img
-
-
 
 trainImgTransforms = transforms.Compose([
     transforms.RandomSizedCrop(224),
@@ -44,7 +45,29 @@ valTransforms = transforms.Compose([
     transforms.ToTensor()
 ])
 
-
+def resizeAndCrop(img, sz):
+    # First resize image so that smallest dim is at least equal to sz
+    h, w, _ = img.shape
+    '''
+    if h < sz:
+        ratio = sz/h
+        ns = (int(ratio*w)+1, int(ratio*h)+1)
+        img = cv2.resize(img, ns)
+    h, w, _ = img.shape
+    if w < sz:
+        ratio = sz/w
+        ns = (int(ratio*w)+1, int(ratio*h)+1)
+        img = cv2.resize(img, ns)
+    '''
+    ratio = sz/h if h <= w else sz/w
+    ns = (int(ratio*w)+1, int(ratio*h)+1)
+    img = cv2.resize(img, ns)
+    h, w, _ = img.shape
+    # pick a random point to crop a sz x sz square
+    st = random.randint(0, h-224) if st==None else st
+    en = random.randint(0, w-224) if en==None else en
+    cropped = img[st:st+224, en:en+224, :]
+    return cropped
 
 class CharadesLoader(data.Dataset):
     def __init__(self, base_dir, input_transform=None, target_transform=None, fps=25, split='train'):
@@ -120,6 +143,21 @@ class CharadesLoader(data.Dataset):
         input = (rgb_tensor, flow_tensor)
         input, target = removeEmptyFromTensor(input, target)
         return input, target
-
+    
+    def randomSamples(self, seq_len):
+        h = w = 224
+        rgb_tensor = torch.Tensor(seq_len, 3, h, w)
+        flow_tensor = torch.Tensor(seq_len, 6, h, w)        
+        targets = torch.Tensor(seq_len)
+        for i in range(seq_len):
+            vid = random.randint(0, len(self.video_names)-1)
+            input, target = self.__getitem__(vid)
+            frame = random.randint(0, len(target)-1)
+            rgb_tensor[i] = input[0][frame]
+            flow_tensor[i] = input[1][frame]
+            targets[i] = target[frame]
+        input = (rgb_tensor, flow_tensor)
+        return input, targets
+    
     def __len__(self):
         return len(self.video_names)

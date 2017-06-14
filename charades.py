@@ -34,15 +34,19 @@ if USE_LSTM:
     net = TwoStreamNetworkLSTM()
     #actionClassifier = nn.Linear(HIDDEN_SIZE*2, NUM_ACTIONS)
     actionClassifier = nn.Sequential(
-        nn.Linear(HIDDEN_SIZE*2, FEATURE_SIZE),
         nn.Dropout(0.5),
-        nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
+        nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE),
+        nn.ReLU(),
+        nn.Dropout(0.5),
+        nn.Linear(HIDDEN_SIZE, NUM_ACTIONS)
     )
 else:
     from models.vgg_twostream import TwoStreamNetwork
     net = TwoStreamNetwork()
     actionClassifier = nn.Sequential(
+        nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE),
+        nn.ReLU(),
         nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
     )
@@ -77,12 +81,14 @@ nllLoss = NLLLoss(weight=invClassWeightstensor.cuda())
 ceLoss = CrossEntropyLoss(weight=invClassWeightstensor.cuda())
 mlsml = MultiLabelSoftMarginLoss()
 smoothl1Loss = SmoothL1Loss()
+tripletLoss = TripletLoss()
 
 def train():
     global actionClassifier
     global net
     net.train()
-    train_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="train"), shuffle=True, **kwargs)
+    cl = CharadesLoader(DATASET_PATH, split="train")
+    train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
     for epoch in range(EPOCHS):
         print('Training for epoch %d' % (epoch))
         for batch_idx, (data, target) in enumerate(train_loader):
@@ -108,6 +114,10 @@ def train():
                 predictionLoss = mseLoss(curFeature, nextFeature)
             elif PREDICTION_LOSS == 'SMOOTHL1':
                 predictionLoss = smoothl1Loss(curFeature, nextFeature)
+            elif PREDICTION_LOSS == 'TRIPLET':
+                negatives, _ = cl.randomSamples(curFeature.size(0))
+                negativeFeature = net(Variable(negatives[0], requires_grad=False).cuda(), Variable(negatives[1], requires_grad=False).cuda()).detach()
+                predictionLoss = tripletLoss(curFeature, nextFeature, negativeFeature)
             else:
                 predictionLoss = kldivLoss(F.log_softmax(curFeature),  F.log_softmax(nextFeature))
             _, action = torch.max(actionFeature, 1)
@@ -118,7 +128,7 @@ def train():
             recognitionLoss = mlsml(actionFeature, target.float())
             jointLoss = recognitionLoss + LAMBDA * predictionLoss
             jointLoss.backward()
-            if batch_idx % 8 == 0:
+            if batch_idx % 4 == 0:
                 optimizer.step()
                 optimizer.zero_grad()
             print(batch_idx, float(jointLoss.data.cpu().numpy()[0]))
