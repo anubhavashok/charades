@@ -70,7 +70,7 @@ def resizeAndCrop(img, sz):
     return cropped
 
 class CharadesLoader(data.Dataset):
-    def __init__(self, base_dir, input_transform=None, target_transform=None, fps=25, split='train', frame_selection='SPACED', batch_size=64):
+    def __init__(self, base_dir, input_transform=None, target_transform=None, fps=25, split='train', frame_selection='SPACED', batch_size=32):
         super(CharadesLoader, self).__init__()
         self.frame_selection = frame_selection
         self.split = split
