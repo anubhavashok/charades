@@ -98,26 +98,30 @@ class CharadesLoader(data.Dataset):
     def __getitem__(self, index):
         video_name = self.video_names[index]
         rgb_files = glob(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '*'))
-        #flow_files = glob(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '*'))
-        seq_len = len(rgb_files) // self.fps - 1
+        N = len(rgb_files)
+        seq_len = N // self.fps - 1
         seq_len = min(self.batch_size, seq_len) # Cap sequence length
-        #h, w = load_img(rgb_files[0]).size
         h = w = 224
         rgb_tensor = torch.Tensor(seq_len, 3, h, w)
         flow_tensor = torch.Tensor(seq_len, 6, h, w)
+        all_targets = torch.LongTensor(N, NUM_ACTIONS)
         #frameNums = [(1+f) * self.fps for f in range(seq_len)]
         target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
         for action in self.actions[video_name]:
             a, s, e = action
-            for i in range(s, min(e, seq_len)):
-                target[i][a] = 1
-        if target.sum() == 0:
+            for i in range(s, e):
+                all_targets[i-1][a] = 1
+        if all_targets.sum() == 0:
             return self.__getitem__(index+1)
+        frameNums = []
+        valid_frames = list(filter(lambda i: all_targets[i].sum() > 0, range(self.fps, N-self.fps)))
         if self.frame_selection == 'RANDOM':
-            frameNums = random.sample(range(self.fps, len(rgb_files)-self.fps), seq_len)
+            frameNums = random.sample(valid_frames, seq_len)
         else:
-            frameNums = [(1+i) * self.fps for i in range(seq_len)]
+            frameNums = findClosestFrames(valid_frames, self.fps, N-self.fps, self.fps)
+            frameNums = frameNums if len(frameNums) <= seq_len else frameNums[:seq_len]
         for i in range(len(frameNums)):
+            target[i] = all_targets[frameNums[i], :]
             frameNum = frameNums[i]#(1+i) * self.fps
             rgb = load_img(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '%s-%06d.jpg' % (video_name, frameNum)))
             rgb = trainImgTransforms(rgb) if self.split == 'train' else valTransforms(rgb)
@@ -147,7 +151,7 @@ class CharadesLoader(data.Dataset):
         rgb_tensor = normalize(rgb_tensor)
         flow_tensor = normalizeFlow(flow_tensor)
         input = (rgb_tensor, flow_tensor)
-        input, target = removeEmptyFromTensor(input, target)
+        #input, target = removeEmptyFromTensor(input, target)
         return input, target
     
     def randomSamples(self, seq_len):
