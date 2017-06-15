@@ -138,8 +138,11 @@ def mAP(conf, gt):
     for i in range(conf.shape[0]):
         if tmp[i]==1:
             ap = ap+prec[i]
-    npos = max(npos, 1)
-    ap = float(ap)/float(npos)
+    #npos = max(npos, 1)
+    if npos:
+        ap = ap/float(npos)
+    else:
+        ap = np.nan
     #ap[np.isnan(ap)] = 0
     return rec, prec, ap
 
