@@ -21,7 +21,7 @@ class TwoStreamNetworkLSTM(nn.Module):
         self.FlowStream.features._modules['0'] = nn.Conv2d(6, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
         resetModel(self.FlowStream)
         self.hidden_size = HIDDEN_SIZE
-        self.lstm = torch.nn.LSTM(FEATURE_SIZE, self.hidden_size, 2, bidirectional=True)
+        self.lstm = torch.nn.LSTM(FEATURE_SIZE*2, self.hidden_size, 2, bidirectional=True)
         self.rgbdropout = nn.Dropout(0.5)
         self.flowdropout = nn.Dropout(0.5)
         self.pool = nn.AvgPool1d(8)
@@ -37,8 +37,8 @@ class TwoStreamNetworkLSTM(nn.Module):
         flowout = self.FlowStream(flow)
         flowout = self.flowdropout(flowout)
         #feat = flowout
-        feat = rgbout
-        #feat = torch.cat([rgbout, flowout], dim=1)
+        #feat = rgbout
+        feat = torch.cat([rgbout, flowout], dim=1)
         feat = feat.unsqueeze(1)
         #feat = self.pool(feat)
         #print(feat.size(), self.h[0].size())
