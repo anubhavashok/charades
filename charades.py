@@ -87,7 +87,7 @@ def train():
     global actionClassifier
     global net
     net.train()
-    cl = CharadesLoader(DATASET_PATH, split="train")
+    cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='RANDOM')
     train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
     for epoch in range(EPOCHS):
         print('Training for epoch %d' % (epoch))
@@ -152,7 +152,7 @@ def test(intermediate=False):
     corr = 0
     t5cum = 0
     f = open('results/testscores.txt', "w+")
-    val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val"))
+    val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val", frame_selection='SPACED'))
     for batch_idx, (data, target) in enumerate(val_loader):
         print(batch_idx)
         if intermediate and batch_idx == 200:
