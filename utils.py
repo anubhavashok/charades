@@ -156,3 +156,18 @@ def charades_ap(conf, gt):
     for i in range(ap.shape[0]):
         _, _, ap[i] = mAP(conf[:, i], gt[:, i])
     return ap
+
+
+
+def findClosestNumber(valid_frames, n):
+    m = 1000000
+    for i in valid_frames:
+        if (n-i)**2 < (n-m)**2:
+            m = i
+    return m
+
+def findClosestFrames(valid_frames, s, e, gap):
+    nums = []
+    for i in range(s, e, gap):
+        nums.append(findClosestNumber(valid_frames, i))
+    return nums
