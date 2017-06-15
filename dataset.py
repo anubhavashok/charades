@@ -102,27 +102,28 @@ class CharadesLoader(data.Dataset):
         seq_len = N // self.fps - 1
         seq_len = min(self.batch_size, seq_len) # Cap sequence length
         h = w = 224
-        rgb_tensor = torch.Tensor(seq_len, 3, h, w)
-        flow_tensor = torch.Tensor(seq_len, 6, h, w)
-        all_targets = torch.LongTensor(N, NUM_ACTIONS)
+        all_targets = torch.LongTensor(N, NUM_ACTIONS).zero_()
         #frameNums = [(1+f) * self.fps for f in range(seq_len)]
-        target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
         for action in self.actions[video_name]:
             a, s, e = action
             for i in range(s, e):
-                all_targets[i-1][a] = 1
-        if all_targets.sum() == 0:
-            return self.__getitem__(index+1)
+                all_targets[i][a] = 1
         frameNums = []
         valid_frames = list(filter(lambda i: all_targets[i].sum() > 0, range(self.fps, N-self.fps)))
+        if all_targets.sum() == 0 or len(valid_frames) == 0:
+            return self.__getitem__(index+1)
         if self.frame_selection == 'RANDOM':
-            frameNums = random.sample(valid_frames, seq_len)
+            frameNums = random.sample(valid_frames, min(seq_len, len(valid_frames)))
         else:
             frameNums = findClosestFrames(valid_frames, self.fps, N-self.fps, self.fps)
             frameNums = frameNums if len(frameNums) <= seq_len else frameNums[:seq_len]
+        seq_len = min(len(frameNums), seq_len) # Cap sequence length
+        target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
+        rgb_tensor = torch.Tensor(seq_len, 3, h, w)
+        flow_tensor = torch.Tensor(seq_len, 6, h, w)
         for i in range(len(frameNums)):
-            target[i] = all_targets[frameNums[i], :]
             frameNum = frameNums[i]#(1+i) * self.fps
+            target[i] = all_targets[frameNum]
             rgb = load_img(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '%s-%06d.jpg' % (video_name, frameNum)))
             rgb = trainImgTransforms(rgb) if self.split == 'train' else valTransforms(rgb)
             rgb_tensor[i] = rgb
