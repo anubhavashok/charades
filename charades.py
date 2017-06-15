@@ -28,9 +28,11 @@ if LOG:
     cc = CrayonClient(hostname="server_machine_address")
 net = None
 actionClassifier = None
+transformer = None
 optimizer = None
 if USE_LSTM:
-    from models.vgg_twostream_lstm import TwoStreamNetworkLSTM
+    #from models.vgg16_twostream_lstm import TwoStreamNetworkLSTM
+    from models.rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
     net = TwoStreamNetworkLSTM()
     #actionClassifier = nn.Linear(HIDDEN_SIZE*2, NUM_ACTIONS)
     actionClassifier = nn.Sequential(
@@ -39,6 +41,12 @@ if USE_LSTM:
         nn.ReLU(),
         nn.Dropout(0.5),
         nn.Linear(HIDDEN_SIZE, NUM_ACTIONS)
+    )
+    transformer = nn.Sequential(
+        nn.Dropout(0.5),
+        nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE*2),
+        nn.Dropout(0.5),
+        nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE*2)
     )
 else:
     from models.vgg_twostream import TwoStreamNetwork
@@ -50,11 +58,18 @@ else:
         nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
     )
+    transformer = nn.Sequential(
+        nn.Dropout(0.5),
+        nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE*2),
+        nn.Dropout(0.5),
+        nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE*2)
+    )
     #actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
 
 if USE_GPU:
     net = net.cuda()
     actionClassifier = actionClassifier.cuda()
+    transformer = transformer.cuda()
 
 if OPTIMIZER == 'ADAM':
     optimizer = optim.Adam([
@@ -83,11 +98,12 @@ mlsml = MultiLabelSoftMarginLoss()
 smoothl1Loss = SmoothL1Loss()
 tripletLoss = TripletLoss()
 
+
 def train():
     global actionClassifier
     global net
     net.train()
-    cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='RANDOM')
+    cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='SPACED')
     train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
     for epoch in range(EPOCHS):
         print('Training for epoch %d' % (epoch))
@@ -108,18 +124,21 @@ def train():
             flow = Variable(flow).cuda()
             target = Variable(target[:-1].long(), requires_grad=False).cuda().detach()
             curFeature = net(rgb, flow)
-            nextFeature = net(nextRGB, nextFlow).detach()
+            predFeature = transformer(curFeature)
             actionFeature = actionClassifier(curFeature)
+            #print(np.argsort(actionFeature.data.cpu().numpy(), axis=1)[:, -5:])
+            #print(np.argsort(target.data.cpu().numpy(), axis=1)[:, -5:])
+            nextFeature = net(nextRGB, nextFlow).detach()
             if PREDICTION_LOSS == 'MSE':
-                predictionLoss = mseLoss(curFeature, nextFeature)
+                predictionLoss = mseLoss(predFeature, nextFeature)
             elif PREDICTION_LOSS == 'SMOOTHL1':
-                predictionLoss = smoothl1Loss(curFeature, nextFeature)
+                predictionLoss = smoothl1Loss(predFeature, nextFeature)
             elif PREDICTION_LOSS == 'TRIPLET':
                 negatives, _ = cl.randomSamples(curFeature.size(0))
                 negativeFeature = net(Variable(negatives[0], requires_grad=False).cuda(), Variable(negatives[1], requires_grad=False).cuda()).detach()
                 predictionLoss = tripletLoss(curFeature, nextFeature, negativeFeature)
             else:
-                predictionLoss = kldivLoss(F.log_softmax(curFeature),  F.log_softmax(nextFeature))
+                predictionLoss = kldivLoss(F.log_softmax(predFeature),  F.log_softmax(nextFeature))
             _, action = torch.max(actionFeature, 1)
             #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
             #recognitionLoss = nllLoss(F.log_softmax(actionFeature), target)
