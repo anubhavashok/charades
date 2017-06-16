@@ -70,8 +70,9 @@ def resizeAndCrop(img, sz):
     return cropped
 
 class CharadesLoader(data.Dataset):
-    def __init__(self, base_dir, input_transform=None, target_transform=None, fps=25, split='train', frame_selection='SPACED', batch_size=32):
+    def __init__(self, base_dir, input_transform=None, target_transform=None, fps=24, split='train', frame_selection='SPACED', batch_size=32):
         super(CharadesLoader, self).__init__()
+        self.testGAP = 25
         self.frame_selection = frame_selection
         self.split = split
         self.batch_size = batch_size
@@ -91,22 +92,22 @@ class CharadesLoader(data.Dataset):
                     continue
                 a, s, e = action.split(' ') 
                 a = int(a[1:])
-                s = int(round(float(s)))
-                e = int(round(float(e)))
+                s = int(float(s)*self.fps)
+                e = int(float(e)*self.fps)
                 self.actions[row['id']].append([a, s, e])
 
     def __getitem__(self, index):
         video_name = self.video_names[index]
         rgb_files = glob(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '*'))
         N = len(rgb_files)
-        seq_len = N // self.fps - 1
+        seq_len = N // self.fps -1
         seq_len = min(self.batch_size, seq_len) # Cap sequence length
         h = w = 224
         all_targets = torch.LongTensor(N, NUM_ACTIONS).zero_()
         #frameNums = [(1+f) * self.fps for f in range(seq_len)]
         for action in self.actions[video_name]:
             a, s, e = action
-            for i in range(s, e):
+            for i in range(s, min(e, N)):
                 all_targets[i][a] = 1
         frameNums = []
         valid_frames = list(filter(lambda i: all_targets[i].sum() > 0, range(self.fps, N-self.fps)))
@@ -114,10 +115,12 @@ class CharadesLoader(data.Dataset):
             return self.__getitem__(index+1)
         if self.frame_selection == 'RANDOM':
             frameNums = random.sample(valid_frames, min(seq_len, len(valid_frames)))
+        elif self.frame_selection == 'TEST':
+            frameNums = [int(ii) for ii in np.linspace(2, N-25-1, self.testGAP)]
         else:
             frameNums = findClosestFrames(valid_frames, self.fps, N-self.fps, self.fps)
             frameNums = frameNums if len(frameNums) <= seq_len else frameNums[:seq_len]
-        seq_len = min(len(frameNums), seq_len) # Cap sequence length
+        seq_len = min(len(frameNums), self.batch_size) # Cap sequence length
         target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
         rgb_tensor = torch.Tensor(seq_len, 3, h, w)
         flow_tensor = torch.Tensor(seq_len, 6, h, w)
