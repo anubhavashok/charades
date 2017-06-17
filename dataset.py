@@ -121,7 +121,6 @@ class CharadesLoader(data.Dataset):
         else:
             frameNums = findClosestFrames(valid_frames, self.fps, N-self.fps, self.fps)
             frameNums = frameNums if len(frameNums) <= seq_len else frameNums[:seq_len]
-        print(frameNums)
         seq_len = min(len(frameNums), self.batch_size) # Cap sequence length
         target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
         rgb_tensor = torch.Tensor(seq_len, 3, h, w)
