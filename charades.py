@@ -171,10 +171,10 @@ def test(intermediate=False):
     corr = 0
     t5cum = 0
     f = open('results/testscores.txt', "w+")
-    val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val", frame_selection='SPACED'))
+    val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val", frame_selection='TEST'))
     for batch_idx, (data, target) in enumerate(val_loader):
         print(batch_idx)
-        if intermediate and batch_idx == 200:
+        if intermediate and batch_idx == 1200:
             break
         (curRGB, curFlow) = data
         curRGB = curRGB.squeeze(0)
