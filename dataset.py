@@ -29,7 +29,7 @@ trainImgTransforms = transforms.Compose([
 
 trainFlowTransforms = transforms.Compose([
     transforms.RandomSizedCrop(224),
-    transforms.RandomHorizontalFlip(),
+    #transforms.RandomHorizontalFlip(),
     transforms.ToTensor()
 ])
 
