@@ -43,9 +43,9 @@ if USE_LSTM:
         nn.Linear(HIDDEN_SIZE, NUM_ACTIONS)
     )
     transformer = nn.Sequential(
-        nn.Dropout(0.5),
+        #nn.Dropout(0.5),
         nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE*2),
-        nn.Dropout(0.5),
+        #nn.Dropout(0.5),
         nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE*2)
     )
 else:
@@ -59,9 +59,9 @@ else:
         nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
     )
     transformer = nn.Sequential(
-        nn.Dropout(0.5),
+        #nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE*2),
-        nn.Dropout(0.5),
+        #nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE*2)
     )
     #actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
@@ -71,18 +71,16 @@ if USE_GPU:
     actionClassifier = actionClassifier.cuda()
     transformer = transformer.cuda()
 
+parametersList = [{'params': net.parameters()},
+                  {'params': actionClassifier.parameters()},
+                  {'params': transformer.parameters()}]
+
 if OPTIMIZER == 'ADAM':
-    optimizer = optim.Adam([
-            {'params': net.parameters()}, 
-            {'params': actionClassifier.parameters()}], lr=LR, weight_decay=5e-4)
+    optimizer = optim.Adam(parametersList, lr=LR, weight_decay=5e-4)
 elif OPTIMIZER == 'SGD':
-    optimizer = optim.SGD([
-            {'params': net.parameters()}, 
-            {'params': actionClassifier.parameters()}], lr=LR, momentum=MOMENTUM, weight_decay=5e-4)
+    optimizer = optim.SGD(parametersList, lr=LR, momentum=MOMENTUM, weight_decay=5e-4)
 else:
-    optimizer = optim.RMSprop([
-            {'params': net.parameters()}, 
-            {'params': actionClassifier.parameters()}], lr=LR, weight_decay=5e-4)
+    optimizer = optim.RMSprop(parametersList, lr=LR, weight_decay=5e-4)
 
 if CLIP_GRAD:
     for p in actionClassifier.parameters():
@@ -103,6 +101,7 @@ def train():
     global actionClassifier
     global net
     net.train()
+    actionClassifier.train()
     cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='SPACED')
     train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
     for epoch in range(EPOCHS):
@@ -168,13 +167,14 @@ def test(intermediate=False):
     global actionClassifier
     global net
     net.eval()
+    actionClassifier.eval()
     corr = 0
     t5cum = 0
     f = open('results/testscores.txt', "w+")
     val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val", frame_selection='TEST'))
     for batch_idx, (data, target) in enumerate(val_loader):
         print(batch_idx)
-        if intermediate and batch_idx == 1200:
+        if intermediate and batch_idx == 200:
             break
         (curRGB, curFlow) = data
         curRGB = curRGB.squeeze(0)
@@ -195,7 +195,10 @@ def test(intermediate=False):
         t5cum += t5a
         _, target_m = torch.max(target, 1)
         _, action = torch.max(actionFeature, 1)
-        outputs.append(np.mean(actionFeature.data.cpu().numpy(), 0))
+        output = actionFeature.data.cpu().numpy()
+        output = np.exp(output)
+        output = np.divide(output, np.expand_dims(output.sum(1), axis=1))
+        outputs.append(np.mean(output, 0))
         targets.append(np.max(target.data.cpu().numpy(), 0))
         correct = target_m.eq(action.type_as(target_m)).sum().data.cpu().numpy()
         corr += (100. * correct) / curRGB.size(0)
@@ -205,13 +208,15 @@ def test(intermediate=False):
     #plot_confusion_matrix(mtr.value(), [])
     #print(corr/(batch_idx))
     outputs = np.array(outputs)
-    outputs = np.exp(outputs)
-    outputs = np.divide(outputs, np.expand_dims(outputs.sum(1), axis=1))
+    #outputs = np.exp(outputs)
+    #outputs = np.divide(outputs, np.expand_dims(outputs.sum(1), axis=1))
     targets = np.array(targets)
     ap = charades_ap(outputs, targets)
     print('mAP', np.mean(ap))
     #print('Top5: ', 100*t5cum/(batch_idx))
     f.close()
+    net.train()
+    actionClassifier.train()
     return (corr/(batch_idx), 100*t5cum/(batch_idx))
 
 if __name__ == "__main__":
