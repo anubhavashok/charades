@@ -111,7 +111,7 @@ classweights = [0.015058585786963999, 0.010392108202010175, 0.008189601687554287
 invclassweights = [1/ii for ii in classweights]
 invclassweights = [ii/sum(invclassweights) for ii in invclassweights]
 invClassWeightstensor = torch.FloatTensor(invclassweights)
-
+invClassWeightstensor = invClassWeightstensor[:-1]
 
 class TripletLoss(_WeightedLoss):
     def __init__(self):
