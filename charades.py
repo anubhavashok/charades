@@ -91,8 +91,8 @@ kwargs = {'num_workers': 1, 'pin_memory': True}
 kldivLoss = KLDivLoss()
 mseLoss = MSELoss()
 nllLoss = NLLLoss(weight=invClassWeightstensor.cuda())
-ceLoss = CrossEntropyLoss(weight=invClassWeightstensor.cuda())
-mlsml = MultiLabelSoftMarginLoss()
+ceLoss = CrossEntropyLoss()#(weight=invClassWeightstensor.cuda())
+mlsml = MultiLabelSoftMarginLoss()#(weight=torch.FloatTensor(classbalanceweights).cuda())
 smoothl1Loss = SmoothL1Loss()
 tripletLoss = TripletLoss()
 
@@ -103,6 +103,7 @@ def train():
     net.train()
     actionClassifier.train()
     cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='SPACED')
+    #sampler = torch.utils.data.sampler.WeightedRandomSampler(classbalanceweights, len(cl))
     train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
     for epoch in range(EPOCHS):
         print('Training for epoch %d' % (epoch))
@@ -110,7 +111,7 @@ def train():
             (rgb, flow) = data
             rgb = rgb.squeeze(0)
             flow = flow.squeeze(0)
-            target = target[0]
+            target = target[0].squeeze()
             if rgb.size(0) <= 1:
                 continue
             nextRGB = rgb[1:, :, :]
@@ -141,9 +142,9 @@ def train():
             _, action = torch.max(actionFeature, 1)
             #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
             #recognitionLoss = nllLoss(F.log_softmax(actionFeature), target)
-            #recognitionLoss = ceLoss(actionFeature, target)
+            recognitionLoss = ceLoss(actionFeature, target)
             #print(F.log_softmax(curFeature), F.log_softmax(nextFeature))
-            recognitionLoss = mlsml(actionFeature, target.float())
+            #recognitionLoss = mlsml(actionFeature, target.float())
             jointLoss = recognitionLoss + LAMBDA * predictionLoss
             jointLoss.backward()
             if batch_idx % 4 == 0:

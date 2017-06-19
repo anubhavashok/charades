@@ -123,11 +123,17 @@ class CharadesLoader(data.Dataset):
             frameNums = frameNums if len(frameNums) <= seq_len else frameNums[:seq_len]
         seq_len = min(len(frameNums), self.batch_size) # Cap sequence length
         target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
+        if self.split == 'train':
+            target = torch.LongTensor(seq_len, 1).zero_()
         rgb_tensor = torch.Tensor(seq_len, 3, h, w)
         flow_tensor = torch.Tensor(seq_len, 6, h, w)
         for i in range(len(frameNums)):
             frameNum = frameNums[i]#(1+i) * self.fps
-            target[i] = all_targets[frameNum]
+            if self.split == "train":
+                cands = all_targets[frameNum].nonzero().cpu().numpy()[0]
+                target[i] = torch.LongTensor([int(np.random.choice(cands).astype(int))])
+            else:
+                target[i] = all_targets[frameNum]
             rgb = load_img(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '%s-%06d.jpg' % (video_name, frameNum)))
             rgb = trainImgTransforms(rgb) if self.split == 'train' else valTransforms(rgb)
             rgb_tensor[i] = rgb
