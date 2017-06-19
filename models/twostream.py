@@ -8,6 +8,7 @@ from config import *
 class TwoStreamNetwork(nn.Module):
     def __init__(self):
         super(TwoStreamNetwork, self).__init__()
+        print('Model: BOTH/ResNet18/CNN')
         model = models.resnet18(pretrained=True)
         model._modules['fc'] = nn.Linear(512, FEATURE_SIZE)
         model._modules['avgpool'] = nn.AvgPool2d(5, 5)

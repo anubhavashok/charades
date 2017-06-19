@@ -9,6 +9,7 @@ from config import *
 class TwoStreamNetworkLSTM(nn.Module):
     def __init__(self):
         super(TwoStreamNetworkLSTM, self).__init__()
+        print('Model: FLOW/VGG16/LSTM')
         model = models.vgg16(pretrained=True)
         model.classifier._modules['6'] = nn.Linear(4096, FEATURE_SIZE)
         self.FlowStream = model

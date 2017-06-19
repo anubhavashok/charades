@@ -9,6 +9,7 @@ from config import *
 class TwoStreamNetworkLSTM(nn.Module):
     def __init__(self):
         super(TwoStreamNetworkLSTM, self).__init__()
+        print('Model: BOTH/ResNet18/LSTM')
         model = models.resnet18(pretrained=True)
         model.fc = nn.Sequential()
         model.avgpool = nn.AvgPool2d(5, 5)
