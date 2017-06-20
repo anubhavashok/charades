@@ -11,6 +11,7 @@ from torchnet import meter
 from config import *
 from utils import *
 import numpy as np
+from time import time
 
 import argparse
 parser = argparse.ArgumentParser(description='Lets win charades')
@@ -106,6 +107,8 @@ def train():
     #sampler = torch.utils.data.sampler.WeightedRandomSampler(classbalanceweights, len(cl))
     train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
     for epoch in range(EPOCHS):
+        adjust_learning_rate(optimizer, epoch)
+        start = time()
         print('Training for epoch %d' % (epoch))
         for batch_idx, (data, target) in enumerate(train_loader):
             (rgb, flow) = data
@@ -153,6 +156,7 @@ def train():
             print(batch_idx, float(jointLoss.data.cpu().numpy()[0]))
             if INTERMEDIATE_TEST and (batch_idx+1) % INTERMEDIATE_TEST == 0:
                 print('Intermediate testing: ', test(intermediate=True))
+        print('Time elapsed %f' % (time() - start))
         if epoch % TEST_FREQ == 0:
             print('Test epoch %d:' % epoch)
             #torch.save({'net': net,
@@ -171,7 +175,7 @@ def test(intermediate=False):
     actionClassifier.eval()
     corr = 0
     t5cum = 0
-    f = open('results/testscores.txt', "w+")
+    f = open('results/%s'%(OUTPUT_NAME), "w+")
     val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val", frame_selection='TEST'))
     for batch_idx, (data, target) in enumerate(val_loader):
         print(batch_idx)
