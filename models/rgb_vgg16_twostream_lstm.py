@@ -16,7 +16,7 @@ class TwoStreamNetworkLSTM(nn.Module):
         self.hidden_size = HIDDEN_SIZE
         self.lstm = torch.nn.LSTM(FEATURE_SIZE, self.hidden_size, 2, bidirectional=True)
         self.rgbdropout = nn.Dropout(0.5)
-        self.pool = nn.AvgPool1d(8)
+        self.pool = nn.AvgPool1d(4)
 
     def reset_hidden(self, batch=1):
         self.h = (Variable(torch.zeros(2*2, batch, self.hidden_size)).cuda(), Variable(torch.zeros(2*2, batch, self.hidden_size)).cuda())
