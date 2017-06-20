@@ -5,6 +5,7 @@ import itertools
 from torch.autograd import Variable
 from torch.nn.modules.loss import _WeightedLoss
 from torch.nn import MSELoss
+from config import *
 
 def top5acc(pred, target):
     pred = pred.cpu()
@@ -146,7 +147,8 @@ def mAP(conf, gt):
     if npos:
         ap = ap/float(npos)
     else:
-        ap = np.nan
+        ap = 0
+        #ap = np.nan
     #ap[np.isnan(ap)] = 0
     return rec, prec, ap
 
@@ -175,3 +177,10 @@ def findClosestFrames(valid_frames, s, e, gap):
     for i in range(s, e, gap):
         nums.append(findClosestNumber(valid_frames, i))
     return nums
+
+
+def adjust_learning_rate(optimizer, epoch):
+    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    lr = args.lr * (0.1 ** (epoch // LR_DECAY))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
