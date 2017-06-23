@@ -29,7 +29,7 @@ if LOG:
     cc = CrayonClient(hostname="server_machine_address")
 net = None
 actionClassifier = None
-transformer = None
+transformer = getTransformer() 
 optimizer = None
 if USE_LSTM:
     #from models.vgg16_twostream_lstm import TwoStreamNetworkLSTM
@@ -43,13 +43,6 @@ if USE_LSTM:
         nn.Dropout(0.5),
         nn.Linear(HIDDEN_SIZE, NUM_ACTIONS)
     )
-    transformer = nn.Sequential(
-        #nn.Dropout(0.5),
-        nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE*2),
-        #nn.Dropout(0.5),
-        nn.ReLU(),
-        nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE*2)
-    )
 else:
     from models.vgg_twostream import TwoStreamNetwork
     net = TwoStreamNetwork()
@@ -59,13 +52,6 @@ else:
         nn.ReLU(),
         nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
-    )
-    transformer = nn.Sequential(
-        #nn.Dropout(0.5),
-        nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE*2),
-        nn.ReLU(),
-        #nn.Dropout(0.5),
-        nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE*2)
     )
     #actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
 
@@ -91,12 +77,8 @@ if CLIP_GRAD:
 
 kwargs = {'num_workers': 1, 'pin_memory': True}
 
-nllLoss = NLLLoss(weight=invClassWeightstensor.cuda())
-ceLoss = CrossEntropyLoss()#(weight=invClassWeightstensor.cuda())
-mlsml = MultiLabelSoftMarginLoss()#(weight=torch.FloatTensor(classbalanceweights).cuda())
-multiLoss = MultiLabelMarginLoss()
-
 predictionLossFunction = getPredictionLossFn()
+recognitionLossFunction = getRecognitionLossFn()
 
 def train():
     global actionClassifier
@@ -135,13 +117,7 @@ def train():
             predictionLoss = predictionLossFunction(predFeature, nextFeature)
             _, action = torch.max(actionFeature, 1)
             #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
-            #recognitionLoss = nllLoss(F.log_softmax(actionFeature), target)
-            if TRAIN_MODE=="SINGLE":
-                recognitionLoss = ceLoss(actionFeature, target)
-            else:
-                recognitionLoss = multiLoss(actionFeature, target)
-            #print(F.log_softmax(curFeature), F.log_softmax(nextFeature))
-            #recognitionLoss = mlsml(actionFeature, target.float())
+            recognitionLoss = recognitionLossFunction(actionFeature, target)
             jointLoss = recognitionLoss + LAMBDA * predictionLoss
             jointLoss.backward()
             if batch_idx % 4 == 0:

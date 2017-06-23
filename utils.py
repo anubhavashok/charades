@@ -2,9 +2,10 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import itertools
+from torch import nn
 from torch.autograd import Variable
 from torch.nn.modules.loss import _WeightedLoss
-from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss
+from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss
 import torch.nn.functional as F
 from config import *
 
@@ -207,4 +208,35 @@ def getPredictionLossFn():
         def prediction_loss(predFeature, nextFeature):
             return kldivLoss(F.log_softmax(predFeature),  F.log_softmax(nextFeature))
     return prediction_loss
+
+
+def getRecognitionLossFn():
+    ceLoss = CrossEntropyLoss()
+    multiLoss = MultiLabelSoftMarginLoss()
+    if TRAIN_MODE=="SINGLE":
+        def recognition_loss(actionFeature, target):
+            return ceLoss(actionFeature, target)
+    else:
+        def recognition_loss(actionFeature, target):
+            return multiLoss(actionFeature, target)
+    return recognition_loss
+
+
+def getTransformer():
+    s = HIDDEN_SIZE if USE_LSTM else FEATURE_SIZE
+    s *= 2
+    transformer = None
+    if TRANSFORMER=="LINEAR":
+        transformer = nn.Sequential(
+        #nn.Dropout(0.5),
+        nn.Linear(s, s),
+        nn.ReLU(),
+        #nn.Dropout(0.5),
+        nn.Linear(s, s))
+    elif TRANSFORMER=='SMOOTH':
+        transformer = nn.Dropout(0)
+    else:
+        from models.transformer_lstm import LSTMTransformer
+        transformer = LSTMTransformer(s, s)
+    return transformer
 
