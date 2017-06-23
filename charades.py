@@ -28,32 +28,16 @@ if LOG:
     os.system('')
     cc = CrayonClient(hostname="server_machine_address")
 net = None
-actionClassifier = None
+actionClassifier = getActionClassifier() 
 transformer = getTransformer() 
 optimizer = None
 if USE_LSTM:
     #from models.vgg16_twostream_lstm import TwoStreamNetworkLSTM
     from models.rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
     net = TwoStreamNetworkLSTM()
-    #actionClassifier = nn.Linear(HIDDEN_SIZE*2, NUM_ACTIONS)
-    actionClassifier = nn.Sequential(
-        nn.Dropout(0.5),
-        nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE),
-        nn.ReLU(),
-        nn.Dropout(0.5),
-        nn.Linear(HIDDEN_SIZE, NUM_ACTIONS)
-    )
 else:
     from models.vgg_twostream import TwoStreamNetwork
     net = TwoStreamNetwork()
-    actionClassifier = nn.Sequential(
-        nn.Dropout(0.5),
-        nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE),
-        nn.ReLU(),
-        nn.Dropout(0.5),
-        nn.Linear(FEATURE_SIZE, NUM_ACTIONS)
-    )
-    #actionClassifier = nn.Linear(FEATURE_SIZE*2, NUM_ACTIONS)
 
 if USE_GPU:
     net = net.cuda()
