@@ -123,14 +123,15 @@ class CharadesLoader(data.Dataset):
             frameNums = frameNums if len(frameNums) <= seq_len else frameNums[:seq_len]
         seq_len = min(len(frameNums), self.batch_size) # Cap sequence length
         target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
-        if self.split == 'train':
+        if self.split == 'train' and TRAIN_MODE=='SINGLE':
             target = torch.LongTensor(seq_len, 1).zero_()
         rgb_tensor = torch.Tensor(seq_len, 3, h, w)
         flow_tensor = torch.Tensor(seq_len, 6, h, w)
         for i in range(len(frameNums)):
             frameNum = frameNums[i]#(1+i) * self.fps
-            if self.split == "train":
+            if self.split == "train" and TRAIN_MODE=='SINGLE':
                 cands = all_targets[frameNum].nonzero().cpu().numpy()[0]
+                #target[i] = torch.LongTensor([int(max(cands, key=lambda x: classweights[x]))])
                 target[i] = torch.LongTensor([int(np.random.choice(cands).astype(int))])
             else:
                 target[i] = all_targets[frameNum]
@@ -170,6 +171,8 @@ class CharadesLoader(data.Dataset):
         rgb_tensor = torch.Tensor(seq_len, 3, h, w)
         flow_tensor = torch.Tensor(seq_len, 6, h, w)        
         targets = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
+        if TRAIN_MODE=='SINGLE':
+            targets = torch.LongTensor(seq_len, 1).zero_()
         for i in range(seq_len):
             vid = random.randint(0, len(self.video_names)-1)
             input, target = self.__getitem__(vid)
