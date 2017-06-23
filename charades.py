@@ -1,7 +1,7 @@
 import torch
 from torchvision import transforms
 from torch import nn, optim
-from torch.nn import MSELoss, KLDivLoss, NLLLoss, CrossEntropyLoss, SmoothL1Loss, MultiLabelSoftMarginLoss
+from torch.nn import MSELoss, KLDivLoss, NLLLoss, CrossEntropyLoss, SmoothL1Loss, MultiLabelSoftMarginLoss, MultiLabelMarginLoss
 from dataset import CharadesLoader
 from copy import deepcopy
 from torch.autograd import Variable
@@ -47,6 +47,7 @@ if USE_LSTM:
         #nn.Dropout(0.5),
         nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE*2),
         #nn.Dropout(0.5),
+        nn.ReLU(),
         nn.Linear(HIDDEN_SIZE*2, HIDDEN_SIZE*2)
     )
 else:
@@ -62,6 +63,7 @@ else:
     transformer = nn.Sequential(
         #nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE*2),
+        nn.ReLU(),
         #nn.Dropout(0.5),
         nn.Linear(FEATURE_SIZE*2, FEATURE_SIZE*2)
     )
@@ -89,14 +91,12 @@ if CLIP_GRAD:
 
 kwargs = {'num_workers': 1, 'pin_memory': True}
 
-kldivLoss = KLDivLoss()
-mseLoss = MSELoss()
 nllLoss = NLLLoss(weight=invClassWeightstensor.cuda())
 ceLoss = CrossEntropyLoss()#(weight=invClassWeightstensor.cuda())
 mlsml = MultiLabelSoftMarginLoss()#(weight=torch.FloatTensor(classbalanceweights).cuda())
-smoothl1Loss = SmoothL1Loss()
-tripletLoss = TripletLoss()
+multiLoss = MultiLabelMarginLoss()
 
+predictionLossFunction = getPredictionLossFn()
 
 def train():
     global actionClassifier
@@ -132,20 +132,14 @@ def train():
             #print(np.argsort(actionFeature.data.cpu().numpy(), axis=1)[:, -5:])
             #print(np.argsort(target.data.cpu().numpy(), axis=1)[:, -5:])
             nextFeature = net(nextRGB, nextFlow).detach()
-            if PREDICTION_LOSS == 'MSE':
-                predictionLoss = mseLoss(predFeature, nextFeature)
-            elif PREDICTION_LOSS == 'SMOOTHL1':
-                predictionLoss = smoothl1Loss(predFeature, nextFeature)
-            elif PREDICTION_LOSS == 'TRIPLET':
-                negatives, _ = cl.randomSamples(curFeature.size(0))
-                negativeFeature = net(Variable(negatives[0], requires_grad=False).cuda(), Variable(negatives[1], requires_grad=False).cuda()).detach()
-                predictionLoss = tripletLoss(curFeature, nextFeature, negativeFeature)
-            else:
-                predictionLoss = kldivLoss(F.log_softmax(predFeature),  F.log_softmax(nextFeature))
+            predictionLoss = predictionLossFunction(predFeature, nextFeature)
             _, action = torch.max(actionFeature, 1)
             #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
             #recognitionLoss = nllLoss(F.log_softmax(actionFeature), target)
-            recognitionLoss = ceLoss(actionFeature, target)
+            if TRAIN_MODE=="SINGLE":
+                recognitionLoss = ceLoss(actionFeature, target)
+            else:
+                recognitionLoss = multiLoss(actionFeature, target)
             #print(F.log_softmax(curFeature), F.log_softmax(nextFeature))
             #recognitionLoss = mlsml(actionFeature, target.float())
             jointLoss = recognitionLoss + LAMBDA * predictionLoss
@@ -162,7 +156,7 @@ def train():
             #torch.save({'net': net,
             #            'classifier': actionClassifier
             #           }, 'checkpoints/checkpoint%d.net' % epoch)
-            test()
+            print('acc: ', test())
 
 def test(intermediate=False):
     #mtr = meter.ConfusionMeter(k=NUM_ACTIONS)
@@ -179,7 +173,7 @@ def test(intermediate=False):
     val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val", frame_selection='TEST'))
     for batch_idx, (data, target) in enumerate(val_loader):
         print(batch_idx)
-        if intermediate and batch_idx == 200:
+        if intermediate and batch_idx == 1700:
             break
         (curRGB, curFlow) = data
         curRGB = curRGB.squeeze(0)

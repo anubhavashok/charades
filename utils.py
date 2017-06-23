@@ -4,7 +4,8 @@ import numpy as np
 import itertools
 from torch.autograd import Variable
 from torch.nn.modules.loss import _WeightedLoss
-from torch.nn import MSELoss
+from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss
+import torch.nn.functional as F
 from config import *
 
 def top5acc(pred, target):
@@ -184,3 +185,26 @@ def adjust_learning_rate(optimizer, epoch):
     lr = LR * (0.1 ** (epoch // LR_DECAY))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+
+def getPredictionLossFn():
+    kldivLoss = KLDivLoss()
+    mseLoss = MSELoss()
+    smoothl1Loss = SmoothL1Loss()
+    tripletLoss = TripletLoss()
+    if PREDICTION_LOSS == 'MSE':
+        def prediction_loss(predFeature, nextFeature):
+            return mseLoss(predFeature, nextFeature)
+    elif PREDICTION_LOSS == 'SMOOTHL1':
+        def prediction_loss(predFeature, nextFeature):
+            return smoothl1Loss(predFeature, nextFeature)
+    elif PREDICTION_LOSS == 'TRIPLET':
+        def prediction_loss(predFeature, nextFeature):
+            negatives, _ = cl.randomSamples(predFeature.size(0))
+            negativeFeature = net(Variable(negatives[0], requires_grad=False).cuda(), Variable(negatives[1], requires_grad=False).cuda()).detach()
+            return tripletLoss(predFeature, nextFeature, negativeFeature)
+    else:
+        def prediction_loss(predFeature, nextFeature):
+            return kldivLoss(F.log_softmax(predFeature),  F.log_softmax(nextFeature))
+    return prediction_loss
+
