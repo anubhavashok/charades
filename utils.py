@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import itertools
 from torch import nn
+from torch import optim
 from torch.autograd import Variable
 from torch.nn.modules.loss import _WeightedLoss
 from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss
@@ -250,3 +251,12 @@ def getActionClassifier():
         nn.Linear(s, NUM_ACTIONS)
     )
     return actionClassifier
+
+def getOptimizer(parametersList):
+    if OPTIMIZER == 'ADAM':
+        optimizer = optim.Adam(parametersList, lr=LR, weight_decay=5e-4)
+    elif OPTIMIZER == 'SGD':
+        optimizer = optim.SGD(parametersList, lr=LR, momentum=MOMENTUM, weight_decay=5e-4)
+    else:
+        optimizer = optim.RMSprop(parametersList, lr=LR, weight_decay=5e-4)
+    return optimizer

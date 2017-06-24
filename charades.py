@@ -30,7 +30,6 @@ if LOG:
 net = None
 actionClassifier = getActionClassifier() 
 transformer = getTransformer() 
-optimizer = None
 if USE_LSTM:
     #from models.vgg16_twostream_lstm import TwoStreamNetworkLSTM
     from models.rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
@@ -47,13 +46,7 @@ if USE_GPU:
 parametersList = [{'params': net.parameters()},
                   {'params': actionClassifier.parameters()},
                   {'params': transformer.parameters()}]
-
-if OPTIMIZER == 'ADAM':
-    optimizer = optim.Adam(parametersList, lr=LR, weight_decay=5e-4)
-elif OPTIMIZER == 'SGD':
-    optimizer = optim.SGD(parametersList, lr=LR, momentum=MOMENTUM, weight_decay=5e-4)
-else:
-    optimizer = optim.RMSprop(parametersList, lr=LR, weight_decay=5e-4)
+optimizer = getOptimizer(parametersList) 
 
 if CLIP_GRAD:
     for p in actionClassifier.parameters():
@@ -150,8 +143,6 @@ def test(intermediate=False):
         #mapmtr.add(actionFeature.data, target.data.cpu().numpy())
         #mapmtr.add(actionFeature.data, target.data, target.data)
         #t5a = top5acc(actionFeature, target)
-        t5a = 0
-        t5cum += t5a
         _, target_m = torch.max(target, 1)
         _, action = torch.max(actionFeature, 1)
         output = actionFeature.data.cpu().numpy()
@@ -167,8 +158,6 @@ def test(intermediate=False):
     #plot_confusion_matrix(mtr.value(), [])
     #print(corr/(batch_idx))
     outputs = np.array(outputs)
-    #outputs = np.exp(outputs)
-    #outputs = np.divide(outputs, np.expand_dims(outputs.sum(1), axis=1))
     targets = np.array(targets)
     ap = charades_ap(outputs, targets)
     print('mAP', np.mean(ap))
