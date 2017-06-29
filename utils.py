@@ -6,7 +6,7 @@ from torch import nn
 from torch import optim
 from torch.autograd import Variable
 from torch.nn.modules.loss import _WeightedLoss
-from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss
+from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss, BCELoss
 import torch.nn.functional as F
 from config import *
 
@@ -213,13 +213,15 @@ def getPredictionLossFn():
 
 def getRecognitionLossFn():
     ceLoss = CrossEntropyLoss()
-    multiLoss = MultiLabelSoftMarginLoss()
+    multiLoss = BCELoss()#MultiLabelSoftMarginLoss()
+    softmax = nn.Softmax()
+    T = 100
     if TRAIN_MODE=="SINGLE":
         def recognition_loss(actionFeature, target):
             return ceLoss(actionFeature, target)
     else:
         def recognition_loss(actionFeature, target):
-            return multiLoss(actionFeature, target)
+            return multiLoss(softmax(actionFeature/T), target.float())
     return recognition_loss
 
 
@@ -260,3 +262,29 @@ def getOptimizer(parametersList):
     else:
         optimizer = optim.RMSprop(parametersList, lr=LR, weight_decay=5e-4)
     return optimizer
+
+best_mean_ap = 0
+def saveModel(net, classifier, transformer, mean_ap, epoch):
+    global best_mean_ap
+    package = {'net': net, 
+               'classifier': classifier, 
+               'transformer': transformer,
+               'mean_ap': mean_ap,
+               'epoch': epoch}
+    if mean_ap > best_mean_ap:
+        # Overwrite best model
+        torch.save(package, 'checkpoints/bestModel.pth')
+        best_mean_ap = mean_ap
+    torch.save(package, 'checkpoints/latestModel.pth')
+    return
+
+
+def toggleOptimization(optimizer, iter, toggleFreq=1):
+    if iter == 0:
+        optimizer.param_groups[0]['lr'] = 0
+        return
+    if iter % toggleFreq == 0:
+        # Toggle
+        lr = max(optimizer.param_groups[0]['lr'], optimizer.param_groups[1]['lr'])
+        for i in range(len(optimizer.param_groups)):
+            optimizer.param_groups[i]['lr'] = 0 if optimizer.param_groups[i]['lr'] > 0 else lr
