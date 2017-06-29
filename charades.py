@@ -16,6 +16,7 @@ from time import time
 import argparse
 parser = argparse.ArgumentParser(description='Lets win charades')
 parser.add_argument('-name', type=str, required=False, default="No name provided", help='Name of experiment')
+parser.add_argument('-resume', type=str, required=False, default=None, help='Path to resume model')
 
 args = parser.parse_args()
 print(args.name)
@@ -38,14 +39,22 @@ else:
     from models.vgg_twostream import TwoStreamNetwork
     net = TwoStreamNetwork()
 
+resume_epoch = 0
+if args.resume:
+    model = torch.load(args.resume)
+    net = model['net']
+    actionClassifier = model['classifier']
+    transformer = model['transformer']
+    resume_epoch = model['epoch']
+
 if USE_GPU:
     net = net.cuda()
     actionClassifier = actionClassifier.cuda()
     transformer = transformer.cuda()
 
-parametersList = [{'params': net.parameters()},
-                  {'params': actionClassifier.parameters()},
-                  {'params': transformer.parameters()}]
+parametersList = [{'params': transformer.parameters()},
+                  {'params': net.parameters()},
+                  {'params': actionClassifier.parameters()}]
 optimizer = getOptimizer(parametersList) 
 
 if CLIP_GRAD:
@@ -65,11 +74,13 @@ def train():
     cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='SPACED')
     #sampler = torch.utils.data.sampler.WeightedRandomSampler(classbalanceweights, len(cl))
     train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
-    for epoch in range(EPOCHS):
+    for epoch in range(resume_epoch, EPOCHS):
         adjust_learning_rate(optimizer, epoch)
         start = time()
         print('Training for epoch %d' % (epoch))
         for batch_idx, (data, target) in enumerate(train_loader):
+            if LAMBDA > 0:
+                toggleOptimization(optimizer, batch_idx, toggleFreq=10)
             (rgb, flow) = data
             rgb = rgb.squeeze(0)
             flow = flow.squeeze(0)
@@ -109,7 +120,10 @@ def train():
             #torch.save({'net': net,
             #            'classifier': actionClassifier
             #           }, 'checkpoints/checkpoint%d.net' % epoch)
-            print('acc: ', test())
+            mean_ap, acc = test()
+            if SAVE_MODEL:
+                saveModel(net, actionClassifier, transformer, mean_ap, epoch)
+            print('acc: ', acc)
 
 def test(intermediate=False):
     #mtr = meter.ConfusionMeter(k=NUM_ACTIONS)
@@ -160,12 +174,13 @@ def test(intermediate=False):
     outputs = np.array(outputs)
     targets = np.array(targets)
     ap = charades_ap(outputs, targets)
-    print('mAP', np.mean(ap))
+    mean_ap = np.mean(ap)
+    print('mAP', mean_ap)
     #print('Top5: ', 100*t5cum/(batch_idx))
     f.close()
     net.train()
     actionClassifier.train()
-    return (corr/(batch_idx), 100*t5cum/(batch_idx))
+    return mean_ap, (corr/(batch_idx), 100*t5cum/(batch_idx))
 
 if __name__ == "__main__":
     # Print experiment details
