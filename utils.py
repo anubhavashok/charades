@@ -2,11 +2,12 @@ import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import itertools
+from copy import deepcopy
 from torch import nn
 from torch import optim
 from torch.autograd import Variable
 from torch.nn.modules.loss import _WeightedLoss
-from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss, BCELoss
+from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss, BCELoss 
 import torch.nn.functional as F
 from config import *
 
@@ -189,7 +190,7 @@ def adjust_learning_rate(optimizer, epoch):
         param_group['lr'] = lr
 
 
-def getPredictionLossFn():
+def getPredictionLossFn(cl=None, net=None):
     kldivLoss = KLDivLoss()
     mseLoss = MSELoss()
     smoothl1Loss = SmoothL1Loss()
@@ -201,7 +202,7 @@ def getPredictionLossFn():
         def prediction_loss(predFeature, nextFeature):
             return smoothl1Loss(predFeature, nextFeature)
     elif PREDICTION_LOSS == 'TRIPLET':
-        def prediction_loss(predFeature, nextFeature):
+        def prediction_loss(predFeature, nextFeature, cl=cl, net=net):
             negatives, _ = cl.randomSamples(predFeature.size(0))
             negativeFeature = net(Variable(negatives[0], requires_grad=False).cuda(), Variable(negatives[1], requires_grad=False).cuda()).detach()
             return tripletLoss(predFeature, nextFeature, negativeFeature)
@@ -213,15 +214,21 @@ def getPredictionLossFn():
 
 def getRecognitionLossFn():
     ceLoss = CrossEntropyLoss()
-    multiLoss = BCELoss()#MultiLabelSoftMarginLoss()
+    multiLoss = BCELoss(weight=classbalanceweights.cuda())
+    #multiLoss = KLDivLoss()
+    #multiLoss = BCELoss()#MultiLabelSoftMarginLoss()
+    log_softmax = nn.LogSoftmax()
     softmax = nn.Softmax()
+    sigmoid = nn.Sigmoid()
     T = 100
     if TRAIN_MODE=="SINGLE":
         def recognition_loss(actionFeature, target):
             return ceLoss(actionFeature, target)
     else:
         def recognition_loss(actionFeature, target):
-            return multiLoss(softmax(actionFeature/T), target.float())
+            return multiLoss(sigmoid(actionFeature), target.float())
+            #return multiLoss(log_softmax(actionFeature), target.float())
+            #return multiLoss(softmax(actionFeature/T), target.float())
     return recognition_loss
 
 
@@ -259,13 +266,26 @@ def getOptimizer(parametersList):
         optimizer = optim.Adam(parametersList, lr=LR, weight_decay=5e-4)
     elif OPTIMIZER == 'SGD':
         optimizer = optim.SGD(parametersList, lr=LR, momentum=MOMENTUM, weight_decay=5e-4)
+    elif OPTIMIZER == 'ADAGRAD':
+        optimizer = optim.Adagrad(parametersList, lr=LR, weight_decay=5e-4)
     else:
         optimizer = optim.RMSprop(parametersList, lr=LR, weight_decay=5e-4)
     return optimizer
 
+def remove_backward_hooks(m):
+    for p in m.parameters():
+        if p._backward_hooks == None:
+            continue
+        for k in p._backward_hooks.keys():
+            del p._backward_hooks[k]
+    return m
+
 best_mean_ap = 0
 def saveModel(net, classifier, transformer, mean_ap, epoch):
     global best_mean_ap
+    net = remove_backward_hooks(deepcopy(net).cpu())
+    transformer = remove_backward_hooks(deepcopy(transformer).cpu())
+    classifier = remove_backward_hooks(deepcopy(classifier).cpu())
     package = {'net': net, 
                'classifier': classifier, 
                'transformer': transformer,
