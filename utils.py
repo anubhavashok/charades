@@ -214,8 +214,8 @@ def getPredictionLossFn(cl=None, net=None):
 
 def getRecognitionLossFn():
     ceLoss = CrossEntropyLoss()
-    multiLoss = BCELoss(weight=classbalanceweights.cuda())
-    #multiLoss = KLDivLoss()
+    #multiLoss = BCELoss(weight=classbalanceweights.cuda())
+    multiLoss = KLDivLoss()
     #multiLoss = BCELoss()#MultiLabelSoftMarginLoss()
     log_softmax = nn.LogSoftmax()
     softmax = nn.Softmax()
@@ -226,8 +226,8 @@ def getRecognitionLossFn():
             return ceLoss(actionFeature, target)
     else:
         def recognition_loss(actionFeature, target):
-            return multiLoss(sigmoid(actionFeature), target.float())
-            #return multiLoss(log_softmax(actionFeature), target.float())
+            #return multiLoss(sigmoid(actionFeature), target.float())
+            return multiLoss(log_softmax(actionFeature), target.float())
             #return multiLoss(softmax(actionFeature/T), target.float())
     return recognition_loss
 
