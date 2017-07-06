@@ -252,13 +252,14 @@ def getTransformer():
 
 def getActionClassifier():
     s = HIDDEN_SIZE if USE_LSTM else FEATURE_SIZE
-    actionClassifier = nn.Sequential(
-        nn.Dropout(0.5),
-        nn.Linear(s*2, s),
-        nn.ReLU(),
-        nn.Dropout(0.5),
-        nn.Linear(s, NUM_ACTIONS)
-    )
+    #actionClassifier = nn.Sequential(
+    #    nn.Dropout(0.5),
+    #    nn.Linear(s*2, s),
+    #    nn.ReLU(),
+    #    nn.Dropout(0.5),
+    #    nn.Linear(s, NUM_ACTIONS)
+    #)
+    actionClassifier = nn.Linear(s*2, NUM_ACTIONS)
     return actionClassifier
 
 def getOptimizer(parametersList):
