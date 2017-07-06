@@ -25,7 +25,7 @@ class TwoStreamNetworkLSTM(nn.Module):
         # Since we are batching sequences we can reset each time
         self.reset_hidden()
         rgbout = self.RGBStream(rgb)
-        rgbout = self.rgbdropout(rgbout)
+        #rgbout = self.rgbdropout(rgbout)
         feat = rgbout
         feat = feat.unsqueeze(1)
         #feat = self.pool(feat)
