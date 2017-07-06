@@ -11,6 +11,7 @@ import csv
 from glob import glob
 import numpy as np
 import random
+import math
 
 from config import *
 from utils import *
@@ -80,6 +81,8 @@ class CharadesLoader(data.Dataset):
         self.batch_size = batch_size
         self.fps = fps
         self.base_dir = base_dir
+        self.remaining = []
+        self.internal_counter = 0
         self.video_names = open(os.path.join(base_dir, '%s.txt'%split)).read().split('\n')[:-1]
         #self.video_names = [v.split('/')[-1] for v in glob(os.path.join(self.base_dir, 'Charades_v1_rgb', '*'))]
         self.input_transform = input_transform
@@ -94,17 +97,20 @@ class CharadesLoader(data.Dataset):
                     continue
                 a, s, e = action.split(' ') 
                 a = int(a[1:])
-                s = int(float(s)*self.fps)
-                e = int(float(e)*self.fps)
+                s = math.floor(float(s)*self.fps)
+                e = math.ceil(float(e)*self.fps)
                 self.actions[row['id']].append([a, s, e])
     def load_files(self, files):
         seq_len = len(files)
+        #rgbFileName = os.path.join(self.base_dir, 'Charades_v1_rgb', files[0][0], '%s-%06d.jpg' % (files[0][0], files[0][1]))
+        #rgb = load_img(rgbFileName)
+        #h, w = rgb.size
         h = w = 224
         rgb_tensor = torch.Tensor(seq_len, 3, h, w)
         flow_tensor = torch.Tensor(seq_len, 6, h, w)
         target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
         if self.split == 'train' and TRAIN_MODE=='SINGLE':
-            target = torch.LongTensor(seq_len, 1).zero_()
+            target = torch.LongTensor(seq_len, 1).fill_(-1)
         
         for i in range(len(files)):
             vid, frameNum = files[i]
@@ -116,7 +122,10 @@ class CharadesLoader(data.Dataset):
                         #cands = all_targets[frameNum].nonzero().cpu().numpy()[0]
                         #target[i] = torch.LongTensor([int(max(cands, key=lambda x: classweights[x]))])
                         #target[i] = torch.LongTensor([int(np.random.choice(cands).astype(int))])
-                        target[i] = target[i] if np.random.random() >= 1./(i+1) else a
+                        if target[i].cpu().numpy() == -1:
+                            target[i] = a
+                        else:
+                            target[i] = target[i] if np.random.random() >= 1./(i+1) else a
                     else:
                         target[i][a] = 1 
             rgbFileName = os.path.join(self.base_dir, 'Charades_v1_rgb', vid, '%s-%06d.jpg' % (vid, frameNum))
@@ -152,7 +161,15 @@ class CharadesLoader(data.Dataset):
         return (rgb_tensor, flow_tensor), target
 
     def __getitem__(self, index):
-        frames = self.get_frame_number_for_vid(index)
+        if len(self.remaining) == 0:
+            frames = self.get_frame_number_for_vid(self.internal_counter)
+            self.remaining = frames 
+            self.internal_counter += 1
+        last = min(self.batch_size, len(self.remaining))
+        frames = self.remaining[:last]
+        self.remaining = self.remaining[last:]
+        if self.frame_selection == "TEST":
+            frames = self.get_frame_number_for_vid(index)
         return self.load_files(frames)
     
     def get_frame_number_for_vid(self, index):
@@ -160,7 +177,7 @@ class CharadesLoader(data.Dataset):
         rgb_files = glob(os.path.join(self.base_dir, 'Charades_v1_rgb', vid, '*'))
         N = len(rgb_files)
         seq_len = N // self.fps -1
-        seq_len = min(self.batch_size, seq_len)
+        #seq_len = min(self.batch_size, seq_len)
         # frame selection code
         all_targets = torch.LongTensor(N, NUM_ACTIONS).zero_()
         #frameNums = [(1+f) * self.fps for f in range(seq_len)]
