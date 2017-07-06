@@ -33,7 +33,8 @@ actionClassifier = getActionClassifier()
 transformer = getTransformer() 
 if USE_LSTM:
     #from models.vgg16_twostream_lstm import TwoStreamNetworkLSTM
-    from models.rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
+    from models.rgb_resnet_twostream_lstm import TwoStreamNetworkLSTM
+    #from models.global_average_rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
     net = TwoStreamNetworkLSTM()
 else:
     from models.vgg_twostream import TwoStreamNetwork
@@ -49,8 +50,11 @@ if args.resume:
 
 if USE_GPU:
     net = net.cuda()
+    #net = nn.DataParallel(net, device_ids=[0, 1])
     actionClassifier = actionClassifier.cuda()
+    #actionClassifier = nn.DataParallel(actionClassifier, device_ids=[0, 1])
     transformer = transformer.cuda()
+    #transformer = nn.DataParallel(transformer, device_ids=[0, 1])
 
 parametersList = [{'params': transformer.parameters()},
                   {'params': net.parameters()},
@@ -58,12 +62,15 @@ parametersList = [{'params': transformer.parameters()},
 optimizer = getOptimizer(parametersList) 
 
 if CLIP_GRAD:
-    for p in actionClassifier.parameters():
-        clip_grad(p, -1, 1)
+    global clip_grad
+    for params in parametersList:
+        for p in params['params']:
+            clip_grad(p, -1, 1)
 
 kwargs = {'num_workers': 1, 'pin_memory': True}
 
-predictionLossFunction = getPredictionLossFn()
+cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='SPACED')
+predictionLossFunction = getPredictionLossFn(cl, net)
 recognitionLossFunction = getRecognitionLossFn()
 
 def train():
@@ -71,7 +78,6 @@ def train():
     global net
     net.train()
     actionClassifier.train()
-    cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='SPACED')
     #sampler = torch.utils.data.sampler.WeightedRandomSampler(classbalanceweights, len(cl))
     train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
     for epoch in range(resume_epoch, EPOCHS):
@@ -79,35 +85,40 @@ def train():
         start = time()
         print('Training for epoch %d' % (epoch))
         for batch_idx, (data, target) in enumerate(train_loader):
-            if LAMBDA > 0:
-                toggleOptimization(optimizer, batch_idx, toggleFreq=10)
             (rgb, flow) = data
             rgb = rgb.squeeze(0)
             flow = flow.squeeze(0)
             target = target[0].squeeze()
             if rgb.size(0) <= 1:
                 continue
-            nextRGB = rgb[1:, :, :]
-            nextRGB = Variable(nextRGB, requires_grad=False).cuda()
+            if LAMBDA > 0:
+                toggleOptimization(optimizer, batch_idx, toggleFreq=16)
+                nextRGB = rgb[1:, :, :]
+                nextRGB = Variable(nextRGB, requires_grad=False).cuda()
+                nextFlow = flow[1:, :, :]
+                nextFlow = Variable(nextFlow, requires_grad=False).cuda()
             rgb = rgb[:-1, :, :]
             rgb = Variable(rgb).cuda()
-            nextFlow = flow[1:, :, :]
-            nextFlow = Variable(nextFlow, requires_grad=False).cuda()
             flow = flow[:-1, :, :]
             flow = Variable(flow).cuda()
             target = Variable(target[:-1].long(), requires_grad=False).cuda().detach()
             curFeature = net(rgb, flow)
-            predFeature = transformer(curFeature)
             actionFeature = actionClassifier(curFeature)
-            #print(np.argsort(actionFeature.data.cpu().numpy(), axis=1)[:, -5:])
-            #print(np.argsort(target.data.cpu().numpy(), axis=1)[:, -5:])
-            nextFeature = net(nextRGB, nextFlow).detach()
-            predictionLoss = predictionLossFunction(predFeature, nextFeature)
-            _, action = torch.max(actionFeature, 1)
-            #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
             recognitionLoss = recognitionLossFunction(actionFeature, target)
-            jointLoss = recognitionLoss + LAMBDA * predictionLoss
-            jointLoss.backward()
+            if LAMBDA > 0:
+                predFeature = transformer(curFeature)
+                #af = Variable(torch.from_numpy(one_hot((target.size(0), NUM_ACTIONS), target.data)).float()).detach().cuda()
+                #predFeature = transformer(torch.cat([af, curFeature], 1))
+                #predFeature = transformer(torch.cat[softmax(actionFeature), curFeature], 1))
+                #print(np.argsort(actionFeature.data.cpu().numpy(), axis=1)[:, -5:])
+                #print(np.argsort(target.data.cpu().numpy(), axis=1)[:, -5:])
+                nextFeature = net(nextRGB, nextFlow).detach()
+                predictionLoss = predictionLossFunction(predFeature, nextFeature)
+                #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
+                jointLoss = recognitionLoss + LAMBDA * predictionLoss
+            else:
+                jointLoss = recognitionLoss
+            _, action = torch.max(actionFeature, 1)
             if batch_idx % 4 == 0:
                 optimizer.step()
                 optimizer.zero_grad()
@@ -140,7 +151,7 @@ def test(intermediate=False):
     val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val", frame_selection='TEST'))
     for batch_idx, (data, target) in enumerate(val_loader):
         print(batch_idx)
-        if intermediate and batch_idx == 1700:
+        if intermediate and batch_idx == 200:
             break
         (curRGB, curFlow) = data
         curRGB = curRGB.squeeze(0)
@@ -160,6 +171,7 @@ def test(intermediate=False):
         _, target_m = torch.max(target, 1)
         _, action = torch.max(actionFeature, 1)
         output = actionFeature.data.cpu().numpy()
+        output = output[target.data.cpu().numpy().sum(1)>0]
         output = np.exp(output)
         output = np.divide(output, np.expand_dims(output.sum(1), axis=1))
         outputs.append(np.mean(output, 0))
