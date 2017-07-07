@@ -21,9 +21,10 @@ class TwoStreamNetworkLSTM(nn.Module):
     def reset_hidden(self, batch=1):
         self.h = (Variable(torch.zeros(2*2, batch, self.hidden_size)).cuda(), Variable(torch.zeros(2*2, batch, self.hidden_size)).cuda())
 
-    def forward(self, rgb, flow):
-        # Since we are batching sequences we can reset each time
-        self.reset_hidden()
+    def forward(self, rgb, flow, reset=True):
+        if reset:
+            # Since we are batching sequences we can reset each time
+            self.reset_hidden()
         rgbout = self.RGBStream(rgb)
         #rgbout = self.rgbdropout(rgbout)
         feat = rgbout
