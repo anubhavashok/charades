@@ -296,4 +296,6 @@ class CharadesLoader(data.Dataset):
         return self.load_files(frames) 
     
     def __len__(self):
-        return len(self.video_names)
+        # The number of size 32 batches
+        return 9347 if self.split == 'train' else len(self.video_names)
+        #return len(self.video_names)
