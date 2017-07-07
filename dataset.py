@@ -97,8 +97,8 @@ class CharadesLoader(data.Dataset):
                     continue
                 a, s, e = action.split(' ') 
                 a = int(a[1:])
-                s = math.floor(float(s)*self.fps)
-                e = math.ceil(float(e)*self.fps)
+                s = int(math.floor(float(s)*self.fps))
+                e = int(math.ceil(float(e)*self.fps))
                 self.actions[row['id']].append([a, s, e])
     def load_files(self, files):
         seq_len = len(files)
