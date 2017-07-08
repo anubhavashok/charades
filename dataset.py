@@ -47,6 +47,7 @@ valTransforms = transforms.Compose([
     transforms.ToTensor()
 ])
 
+#trainImgTransforms = valTransforms
 
 def resizeAndCrop(img, sz):
     # First resize image so that smallest dim is at least equal to sz
@@ -88,6 +89,7 @@ class CharadesLoader(data.Dataset):
         self.input_transform = input_transform
         self.target_transform = target_transform
         self.actions = {}
+        self.gen_sequence()
         f = open(os.path.join(base_dir, 'vu17_charades', 'Charades_vu17_%s.csv'%split))
         reader = csv.DictReader(f)
         for row in reader:
@@ -100,6 +102,11 @@ class CharadesLoader(data.Dataset):
                 s = int(math.floor(float(s)*self.fps))
                 e = int(math.ceil(float(e)*self.fps))
                 self.actions[row['id']].append([a, s, e])
+    def gen_sequence(self):
+        self.internal_counter = 0
+        self.seq = list(range(len(self.video_names)))
+        np.random.shuffle(self.seq)
+    
     def load_files(self, files):
         seq_len = len(files)
         #rgbFileName = os.path.join(self.base_dir, 'Charades_v1_rgb', files[0][0], '%s-%06d.jpg' % (files[0][0], files[0][1]))
@@ -161,8 +168,11 @@ class CharadesLoader(data.Dataset):
         return (rgb_tensor, flow_tensor), target
 
     def __getitem__(self, index):
+        if index == self.__len__() - 1:
+            # shuffle dataset
+            self.gen_sequence()
         if len(self.remaining) == 0:
-            frames = self.get_frame_number_for_vid(self.internal_counter)
+            frames = self.get_frame_number_for_vid(self.seq[self.internal_counter])
             self.remaining = frames 
             self.internal_counter += 1
         last = min(self.batch_size, len(self.remaining))
