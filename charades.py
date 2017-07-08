@@ -105,6 +105,7 @@ def train():
             curFeature = net(rgb, flow)
             actionFeature = actionClassifier(curFeature)
             recognitionLoss = recognitionLossFunction(actionFeature, target)
+            jointLoss = recognitionLoss
             if LAMBDA > 0:
                 predFeature = transformer(curFeature)
                 #af = Variable(torch.from_numpy(one_hot((target.size(0), NUM_ACTIONS), target.data)).float()).detach().cuda()
@@ -116,8 +117,7 @@ def train():
                 predictionLoss = predictionLossFunction(predFeature, nextFeature)
                 #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
                 jointLoss = recognitionLoss + LAMBDA * predictionLoss
-            else:
-                jointLoss = recognitionLoss
+            jointLoss.backward()
             _, action = torch.max(actionFeature, 1)
             if batch_idx % 4 == 0:
                 optimizer.step()
