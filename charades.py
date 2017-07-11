@@ -33,7 +33,8 @@ actionClassifier = getActionClassifier()
 transformer = getTransformer() 
 if USE_LSTM:
     #from models.vgg16_twostream_lstm import TwoStreamNetworkLSTM
-    from models.rgb_resnet_twostream_lstm import TwoStreamNetworkLSTM
+    from models.twostream_lstm import TwoStreamNetworkLSTM
+    #from models.rgb_resnet_twostream_lstm import TwoStreamNetworkLSTM
     #from models.global_average_rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
     net = TwoStreamNetworkLSTM()
 else:
@@ -119,7 +120,7 @@ def train():
                 jointLoss = recognitionLoss + LAMBDA * predictionLoss
             jointLoss.backward()
             _, action = torch.max(actionFeature, 1)
-            if batch_idx % 4 == 0:
+            if batch_idx % 8 == 0:
                 optimizer.step()
                 optimizer.zero_grad()
             print(batch_idx, float(jointLoss.data.cpu().numpy()[0]))
@@ -162,6 +163,7 @@ def test(intermediate=False):
         target = Variable(target, volatile=True).cuda()
         curFeature = net(curRGB, curFlow).detach()
         actionFeature = actionClassifier(curFeature).detach()
+        #actionFeature.data = unmapClasses(actionFeature.data)
         vid = val_loader.dataset.video_names[batch_idx]
         writeTestScore(f, vid, actionFeature)
         #mtr.add(actionFeature.data, target.data)
