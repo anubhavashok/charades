@@ -9,21 +9,17 @@ from config import *
 class TwoStreamNetworkLSTM(nn.Module):
     def __init__(self):
         super(TwoStreamNetworkLSTM, self).__init__()
-        print('Model: BOTH/ResNet18/LSTM')
+        print('Model: TwoStream/ResNet18/LSTM')
         model = models.resnet18(pretrained=True)
-        model.fc = nn.Sequential()
-        model.avgpool = nn.AvgPool2d(5, 5)
-        model.fc.add_module('embedding', nn.Linear(512, FEATURE_SIZE))
-        model.layer1.add_module('2', nn.Dropout2d(0.3))
-        model.layer2.add_module('2', nn.Dropout2d(0.3))
-        model.layer3.add_module('2', nn.Dropout2d(0.3))
-        model.layer4.add_module('2', nn.Dropout2d(0.3))
+        model.fc = nn.Dropout(0)
         self.RGBStream = deepcopy(model)
         self.FlowStream = deepcopy(model)
-        self.FlowStream.conv1 = nn.Conv2d(6, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
-        resetModel(self.FlowStream)
+        w = self.FlowStream.conv1.state_dict()
+        w['weight'] = w['weight'].mean(dim=1).repeat(1,20,1,1)
+        self.FlowStream.conv1 = nn.Conv2d(20, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.FlowStream.conv1.load_state_dict(w)
         self.hidden_size = HIDDEN_SIZE
-        self.lstm = torch.nn.LSTM(FEATURE_SIZE*2, self.hidden_size, 2, bidirectional=True)
+        self.lstm = torch.nn.LSTM(512*2, self.hidden_size, 2, bidirectional=True)
         self.rgbdropout = nn.Dropout()
         self.flowdropout = nn.Dropout()
 
