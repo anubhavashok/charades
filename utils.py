@@ -7,7 +7,7 @@ from torch import nn
 from torch import optim
 from torch.autograd import Variable
 from torch.nn.modules.loss import _WeightedLoss
-from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss, BCELoss 
+from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss, BCELoss, CosineEmbeddingLoss 
 import torch.nn.functional as F
 from config import *
 
@@ -195,6 +195,7 @@ def getPredictionLossFn(cl=None, net=None):
     mseLoss = MSELoss()
     smoothl1Loss = SmoothL1Loss()
     tripletLoss = TripletLoss()
+    cosineLoss = CosineEmbeddingLoss(margin=0.5)
     if PREDICTION_LOSS == 'MSE':
         def prediction_loss(predFeature, nextFeature):
             return mseLoss(predFeature, nextFeature)
@@ -206,6 +207,18 @@ def getPredictionLossFn(cl=None, net=None):
             negatives, _ = cl.randomSamples(predFeature.size(0))
             negativeFeature = net(Variable(negatives[0], requires_grad=False).cuda(), Variable(negatives[1], requires_grad=False).cuda()).detach()
             return tripletLoss(predFeature, nextFeature, negativeFeature)
+    elif PREDICTION_LOSS == 'COSINE':
+        def prediction_loss(predFeature, nextFeature, cl=cl, net=net):
+           negatives, _ = cl.randomSamples(predFeature.size(0))
+           negativeFeature = net(Variable(negatives[0], requires_grad=False).cuda(), Variable(negatives[1], requires_grad=False).cuda()).detach()
+           # concat positive and negative features
+           # create targets for concatenated positives and negatives
+           input1 = torch.cat([predFeature, predFeature], dim=0)
+           input2 = torch.cat([nextFeature, negativeFeature], dim=0)
+           target1 = Variable(torch.ones(predFeature.size(0)), requires_grad=False).detach().cuda()
+           target2 = -target1
+           target = torch.cat([target1, target2], dim=0)
+           return cosineLoss(input1, input2, target)
     else:
         def prediction_loss(predFeature, nextFeature):
             return kldivLoss(F.log_softmax(predFeature),  F.log_softmax(nextFeature))
@@ -213,7 +226,7 @@ def getPredictionLossFn(cl=None, net=None):
 
 
 def getRecognitionLossFn():
-    ceLoss = CrossEntropyLoss()
+    ceLoss = CrossEntropyLoss()#(weight=classbalanceweights.cuda())
     #multiLoss = BCELoss(weight=classbalanceweights.cuda())
     multiLoss = KLDivLoss(weight=classbalanceweights.cuda())
     #multiLoss = BCELoss()#MultiLabelSoftMarginLoss()
@@ -223,11 +236,13 @@ def getRecognitionLossFn():
     T = 100
     if TRAIN_MODE=="SINGLE":
         def recognition_loss(actionFeature, target):
+            #target = remapClasses(target.data.cpu().numpy())
+            #target = Variable(torch.from_numpy(target), requires_grad=False).cuda().detach()
             return ceLoss(actionFeature, target)
     else:
         def recognition_loss(actionFeature, target):
             #return multiLoss(sigmoid(actionFeature), target.float())
-            target = Variable(augmentLabels(target.data)).detach()
+            #target = Variable(augmentLabels(target.data)).detach()
             return multiLoss(log_softmax(actionFeature), target.float())
             #return multiLoss(softmax(actionFeature/T), target.float())
     return recognition_loss
@@ -241,7 +256,6 @@ def getTransformer():
         transformer = nn.Sequential(
         #nn.Dropout(0.5),
         nn.Linear(s, s),
-        nn.ReLU(),
         #nn.Dropout(0.5),
         nn.Linear(s, s))
     elif TRANSFORMER=='SMOOTH':
@@ -331,6 +345,7 @@ a = [[0,1,2,3,4,5],
 [83,84,85,86,87,88],
 [89,90,91,92],
 [93,94,95,96],
+[97],
 [98,99,100,101,102],
 [103,104,105],
 [106,107,108,109,110,111],
@@ -340,11 +355,26 @@ a = [[0,1,2,3,4,5],
 [122,123],
 [124,125,126,127],
 [128,129],
+[130],
 [131,132],
 [133,134,135],
 [136,137,138],
+[139],
 [140,141],
-[142,143]]
+[142,143],
+[144],
+[145],
+[146],
+[147],
+[148],
+[149],
+[150],
+[151],
+[152],
+[153],
+[154],
+[155],
+[156]]
 
 revMap = {}
 from copy import copy
@@ -363,3 +393,19 @@ def augmentLabels(labels):
             labels[r[0]][k] = max(0.4, labels[r[0]][k])
     return labels
 
+
+def remapClasses(targets):
+    for i in range(len(targets)):
+        t = targets[i]
+        for j in range(len(a)):
+            if t in a[j]:
+                targets[i] = j
+    return targets
+
+def unmapClasses(actionFeature):
+    output = torch.FloatTensor(actionFeature.size(0), NUM_ACTIONS)
+    for i in range(actionFeature.size(0)):
+        for j in range(actionFeature.size(1)):
+            for k in a[j]:
+                output[i][k] = actionFeature[i][j]
+    return output
