@@ -23,9 +23,28 @@ def load_img(filepath, transforms=None):
     return img
 
 
+def corner_crop_random(img, sz=224):
+    w, h = (img.size[0], img.size[1])
+    idx = int(np.random.random()*5)
+    # 0-3 clockwise starting from top left 4 - center
+    crop_coords = (w/2-sz/2, h/2-sz/2, w/2+sz/2, h/2+sz/2)
+    if idx == 0:
+        crop_coords = (0, 0, sz, sz)
+    if idx == 1:
+        crop_coords = (w-sz, 0, w, sz)
+    if idx == 2:
+        crop_coords = (w-sz, h-sz, w, h)
+    if idx == 3:
+        crop_coords = (0, h-sz, sz, h)
+    return img.crop(crop_coords)
+
+CornerCrop = transforms.Lambda(corner_crop_random)
+
 trainImgTransforms = transforms.Compose([
+    #transforms.Scale(256),
+    #CornerCrop,
     transforms.RandomSizedCrop(224),
-    transforms.RandomHorizontalFlip(),
+    #transforms.RandomHorizontalFlip(),
     transforms.ToTensor()
 ])
 
@@ -37,17 +56,20 @@ trainFlowTransforms = transforms.Compose([
 
 Crop = None
 if TEST_CROP_MODE == 'CenterCrop':
-    Crop = transforms.CenterCrop
+    Crop = transforms.CenterCrop(224)
+elif TEST_CROP_MODE == 'CornerCrop':
+    Crop = CornerCrop 
 else:
-    Crop = transforms.RandomCrop
+    Crop = transforms.RandomCrop(224)
 
 valTransforms = transforms.Compose([
     transforms.Scale(256),
-    Crop(224),
+    Crop,
     transforms.ToTensor()
 ])
 
 #trainImgTransforms = valTransforms
+
 
 def resizeAndCrop(img, sz):
     # First resize image so that smallest dim is at least equal to sz
@@ -109,12 +131,9 @@ class CharadesLoader(data.Dataset):
     
     def load_files(self, files):
         seq_len = len(files)
-        #rgbFileName = os.path.join(self.base_dir, 'Charades_v1_rgb', files[0][0], '%s-%06d.jpg' % (files[0][0], files[0][1]))
-        #rgb = load_img(rgbFileName)
-        #h, w = rgb.size
         h = w = 224
-        rgb_tensor = torch.Tensor(seq_len, 3, h, w)
-        flow_tensor = torch.Tensor(seq_len, 6, h, w)
+        rgb_tensor = self.load_rgb(files) if USE_RGB else torch.Tensor(seq_len, 3, h, w)
+        flow_tensor = self.load_flow(files) if USE_FLOW else torch.Tensor(seq_len, 2*NUM_FLOW, h, w)
         target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
         if self.split == 'train' and TRAIN_MODE=='SINGLE':
             target = torch.LongTensor(seq_len, 1).fill_(-1)
@@ -134,12 +153,33 @@ class CharadesLoader(data.Dataset):
                         else:
                             target[i] = target[i] if np.random.random() >= 1./(i+1) else a
                     else:
-                        target[i][a] = 1 
+                        target[i][a] = 1
+                
+        return (rgb_tensor, flow_tensor), target
+
+
+    def load_rgb(self, files, h=224, w=224):
+        seq_len = len(files)
+        rgb_tensor = torch.Tensor(seq_len, 3, h, w)
+        for i in range(len(files)):
+            vid, frameNum = files[i]
             rgbFileName = os.path.join(self.base_dir, 'Charades_v1_rgb', vid, '%s-%06d.jpg' % (vid, frameNum))
             rgb = load_img(rgbFileName)
             rgb = trainImgTransforms(rgb) if self.split == 'train' else valTransforms(rgb)
             rgb_tensor[i] = rgb
-            for flowNum in range(frameNum-1, frameNum+2):
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                    std=[0.229, 0.224, 0.225])
+        return normalize(rgb_tensor)
+    
+    
+    def load_flow(self, files, h=224, w=224):
+        seq_len = len(files)
+        flow_tensor = torch.Tensor(seq_len, 2*NUM_FLOW, h, w)
+        for i in range(len(files)):
+            vid, frameNum = files[i]
+            s = NUM_FLOW//2
+            e = NUM_FLOW-s
+            for flowNum in range(frameNum-s, frameNum+e):
                 flowxFileName = os.path.join(self.base_dir, 'Charades_v1_flow', vid, '%s-%06dx.jpg' % (vid, frameNum))
                 flowyFileName = os.path.join(self.base_dir, 'Charades_v1_flow', vid, '%s-%06dy.jpg' % (vid, frameNum))
                 flowx = load_img(flowxFileName)
@@ -149,10 +189,8 @@ class CharadesLoader(data.Dataset):
                 flowImage = Image.merge("RGB", [flowx,flowy,flowx])
                 flowImage = trainFlowTransforms(flowImage) if self.split == 'train' else valTransforms(flowImage)
                 flowImage = flowImage[0:2, :, :]
-                j = 2*(flowNum - (frameNum-1))
+                j = 2*(flowNum - (frameNum-s))
                 flow_tensor[i, j:j+2] = flowImage
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                    std=[0.229, 0.224, 0.225])
         flowflatx = (flow_tensor[:, 0, :, :]).contiguous().view(-1)
         flowflaty = (flow_tensor[:, 1, :, :]).contiguous().view(-1)
         flowstdx = torch.std(flowflatx)
@@ -160,12 +198,9 @@ class CharadesLoader(data.Dataset):
         flowstdy = torch.std(flowflaty)
         flowmeany = torch.mean(flowflaty)
         flowstdx = flowstdy = 1.0; flowmeanx = flowmeany = 128/255.0
-        normalizeFlow = transforms.Normalize(mean=[flowmeanx, flowmeany]*3,
-                                    std=[flowstdx, flowstdy]*3)
-        rgb_tensor = normalize(rgb_tensor)
-        flow_tensor = normalizeFlow(flow_tensor)
-        
-        return (rgb_tensor, flow_tensor), target
+        normalizeFlow = transforms.Normalize(mean=[flowmeanx, flowmeany]*NUM_FLOW,
+                                    std=[flowstdx, flowstdy]* NUM_FLOW)
+        return normalizeFlow(flow_tensor)
 
     def __getitem__(self, index):
         if index == self.__len__() - 1:
@@ -209,93 +244,6 @@ class CharadesLoader(data.Dataset):
             frameNums = frameNums if len(frameNums) <= seq_len else frameNums[:seq_len]
         return list(zip([vid]*len(frameNums), frameNums))
 
-    def __getitem_old__(self, index):
-        video_name = self.video_names[index]
-        rgb_files = glob(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '*'))
-        N = len(rgb_files)
-        seq_len = N // self.fps -1
-        seq_len = min(self.batch_size, seq_len) # Cap sequence length
-        h = w = 224
-        all_targets = torch.LongTensor(N, NUM_ACTIONS).zero_()
-        #frameNums = [(1+f) * self.fps for f in range(seq_len)]
-        for action in self.actions[video_name]:
-            a, s, e = action
-            for i in range(s, min(e, N)):
-                all_targets[i][a] = 1
-        frameNums = []
-        valid_frames = list(filter(lambda i: all_targets[i].sum() > 0, range(self.fps, N-self.fps)))
-        if all_targets.sum() == 0 or len(valid_frames) == 0:
-            return self.__getitem__(index+1)
-        if self.frame_selection == 'RANDOM':
-            frameNums = random.sample(valid_frames, min(seq_len, len(valid_frames)))
-            frameNums.sort()
-        elif self.frame_selection == 'TEST':
-            frameNums = [int(ii) for ii in np.linspace(2, N-25-1, self.testGAP)]
-        else:
-            frameNums = findClosestFrames(valid_frames, self.fps, N-self.fps, self.fps)
-            frameNums = frameNums if len(frameNums) <= seq_len else frameNums[:seq_len]
-        seq_len = min(len(frameNums), self.batch_size) # Cap sequence length
-        target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
-        if self.split == 'train' and TRAIN_MODE=='SINGLE':
-            target = torch.LongTensor(seq_len, 1).zero_()
-        rgb_tensor = torch.Tensor(seq_len, 3, h, w)
-        flow_tensor = torch.Tensor(seq_len, 6, h, w)
-        for i in range(len(frameNums)):
-            frameNum = frameNums[i]#(1+i) * self.fps
-            if self.split == "train" and TRAIN_MODE=='SINGLE':
-                cands = all_targets[frameNum].nonzero().cpu().numpy()[0]
-                #target[i] = torch.LongTensor([int(max(cands, key=lambda x: classweights[x]))])
-                target[i] = torch.LongTensor([int(np.random.choice(cands).astype(int))])
-            else:
-                target[i] = all_targets[frameNum]
-            rgb = load_img(os.path.join(self.base_dir, 'Charades_v1_rgb', video_name, '%s-%06d.jpg' % (video_name, frameNum)))
-            rgb = trainImgTransforms(rgb) if self.split == 'train' else valTransforms(rgb)
-            rgb_tensor[i] = rgb
-            for flowNum in range(frameNum-1, frameNum+2):
-                flowx = load_img(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '%s-%06dx.jpg' % (video_name, flowNum)))
-                flowy = load_img(os.path.join(self.base_dir, 'Charades_v1_flow', video_name, '%s-%06dy.jpg' % (video_name, flowNum)))
-                flowx, _, _ = flowx.split()
-                flowy, _, _ = flowy.split()
-                flowImage = Image.merge("RGB", [flowx,flowy,flowx])
-                flowImage = trainFlowTransforms(flowImage) if self.split == 'train' else valTransforms(flowImage)
-                flowImage = flowImage[0:2, :, :]
-                j = 2*(flowNum - (frameNum-1))
-                flow_tensor[i, j:j+2] = flowImage
-        
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-        flowflatx = (flow_tensor[:, 0, :, :]).contiguous().view(-1)
-        flowflaty = (flow_tensor[:, 1, :, :]).contiguous().view(-1)
-        flowstdx = torch.std(flowflatx)
-        flowmeanx = torch.mean(flowflatx)
-        flowstdy = torch.std(flowflaty)
-        flowmeany = torch.mean(flowflaty)
-        flowstdx = flowstdy = 1.0; flowmeanx = flowmeany = 128/255.0
-        normalizeFlow = transforms.Normalize(mean=[flowmeanx, flowmeany]*3,
-                                     std=[flowstdx, flowstdy]*3)
-        rgb_tensor = normalize(rgb_tensor)
-        flow_tensor = normalizeFlow(flow_tensor)
-        input = (rgb_tensor, flow_tensor)
-        #input, target = removeEmptyFromTensor(input, target)
-        return input, target
-    
-    def randomSamplesOld(self, seq_len):
-        h = w = 224
-        rgb_tensor = torch.Tensor(seq_len, 3, h, w)
-        flow_tensor = torch.Tensor(seq_len, 6, h, w)        
-        targets = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
-        if TRAIN_MODE=='SINGLE':
-            targets = torch.LongTensor(seq_len, 1).zero_()
-        for i in range(seq_len):
-            vid = random.randint(0, len(self.video_names)-1)
-            input, target = self.__getitem__(vid)
-            frame = random.randint(0, len(target)-1)
-            rgb_tensor[i] = input[0][frame]
-            flow_tensor[i] = input[1][frame]
-            targets[i] = target[frame]
-        input = (rgb_tensor, flow_tensor)
-        return input, targets
-
     def randomSamples(self, seq_len):
         frames = []
         for i in range(seq_len):
@@ -307,5 +255,6 @@ class CharadesLoader(data.Dataset):
     
     def __len__(self):
         # The number of size 32 batches
+        # TODO: remember to change hardcoded number for final testing
         return 9347 if self.split == 'train' else len(self.video_names)
         #return len(self.video_names)
