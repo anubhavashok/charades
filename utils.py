@@ -7,7 +7,7 @@ from torch import nn
 from torch import optim
 from torch.autograd import Variable
 from torch.nn.modules.loss import _WeightedLoss
-from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss, BCELoss, CosineEmbeddingLoss 
+from torch.nn import MSELoss, KLDivLoss, SmoothL1Loss, CrossEntropyLoss, MultiLabelSoftMarginLoss, BCELoss, CosineEmbeddingLoss, TripletMarginLoss 
 import torch.nn.functional as F
 from config import *
 
@@ -194,7 +194,7 @@ def getPredictionLossFn(cl=None, net=None):
     kldivLoss = KLDivLoss()
     mseLoss = MSELoss()
     smoothl1Loss = SmoothL1Loss()
-    tripletLoss = TripletLoss()
+    tripletLoss = TripletMarginLoss()#TripletLoss()
     cosineLoss = CosineEmbeddingLoss(margin=0.5)
     if PREDICTION_LOSS == 'MSE':
         def prediction_loss(predFeature, nextFeature):
