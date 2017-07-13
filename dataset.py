@@ -132,8 +132,8 @@ class CharadesLoader(data.Dataset):
     def load_files(self, files):
         seq_len = len(files)
         h = w = 224
-        rgb_tensor = self.load_rgb(files) if USE_RGB else torch.Tensor(seq_len, 3, h, w)
-        flow_tensor = self.load_flow(files) if USE_FLOW else torch.Tensor(seq_len, 2*NUM_FLOW, h, w)
+        rgb_tensor = self.load_rgb(files) if USE_RGB else torch.Tensor(seq_len, 3, 1, 1)
+        flow_tensor = self.load_flow(files) if USE_FLOW else torch.Tensor(seq_len, 2*NUM_FLOW, 1, 1)
         target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
         if self.split == 'train' and TRAIN_MODE=='SINGLE':
             target = torch.LongTensor(seq_len, 1).fill_(-1)
