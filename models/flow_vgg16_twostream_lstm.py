@@ -10,11 +10,14 @@ class TwoStreamNetworkLSTM(nn.Module):
     def __init__(self):
         super(TwoStreamNetworkLSTM, self).__init__()
         print('Model: FLOW/VGG16/LSTM')
+        USE_RGB=False
+        FEATURE_SIZE = 4096
         model = torch.load('models/pretrained_flow.net')
         #model = models.vgg16(pretrained=True)
-        model.classifier._modules['6'] = nn.Linear(4096, FEATURE_SIZE)
+        del model.classifier._modules['6']
+        #model.classifier._modules['6'] = nn.Linear(4096, FEATURE_SIZE)
         self.FlowStream = model
-        self.FlowStream.features._modules['0'] = nn.Conv2d(6, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        #self.FlowStream.features._modules['0'] = nn.Conv2d(6, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
         #resetModel(self.FlowStream)
         self.hidden_size = HIDDEN_SIZE
         self.lstm = torch.nn.LSTM(FEATURE_SIZE, self.hidden_size, 2, bidirectional=True)

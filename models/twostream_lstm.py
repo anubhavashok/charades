@@ -10,6 +10,8 @@ class TwoStreamNetworkLSTM(nn.Module):
     def __init__(self):
         super(TwoStreamNetworkLSTM, self).__init__()
         print('Model: TwoStream/ResNet18/LSTM')
+        USE_RGB=True
+        USE_FLOW=True
         model = models.resnet18(pretrained=True)
         model.fc = nn.Dropout(0)
         self.RGBStream = deepcopy(model)
