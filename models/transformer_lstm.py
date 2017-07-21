@@ -1,10 +1,10 @@
 import torch
-from config import *
 from torch import nn
 from torch.autograd import Variable
+import config
 
 class LSTMTransformer(nn.Module):
-    def __init__(self, input_size=HIDDEN_SIZE, hidden_size=HIDDEN_SIZE):
+    def __init__(self, input_size=config.HIDDEN_SIZE, hidden_size=config.HIDDEN_SIZE):
         super(LSTMTransformer, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size

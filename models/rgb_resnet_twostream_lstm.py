@@ -3,18 +3,18 @@ from torch import nn
 from torch.autograd import Variable
 from copy import deepcopy
 from torchvision import models
-from utils import *
-from config import *
+import config
 
 class TwoStreamNetworkLSTM(nn.Module):
     def __init__(self):
         super(TwoStreamNetworkLSTM, self).__init__()
         print('Model: RGB/RESNET/LSTM')
+        config.USE_FLOW=False
         model = models.resnet18(pretrained=True)
-        model.fc = nn.Linear(512, FEATURE_SIZE)
+        model.fc = nn.Linear(512, config.FEATURE_SIZE)
         self.RGBStream = model
-        self.hidden_size = HIDDEN_SIZE
-        self.lstm = torch.nn.LSTM(FEATURE_SIZE, self.hidden_size, 2, bidirectional=True)
+        self.hidden_size = config.HIDDEN_SIZE
+        self.lstm = torch.nn.LSTM(config.FEATURE_SIZE, self.hidden_size, 2, bidirectional=True)
         self.rgbdropout = nn.Dropout(0.5)
         self.pool = nn.AvgPool1d(4)
 

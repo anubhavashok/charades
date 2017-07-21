@@ -4,14 +4,14 @@ from torch.autograd import Variable
 from copy import deepcopy
 from torchvision import models
 from utils import *
-from config import *
+import config
 
 class TwoStreamNetworkLSTM(nn.Module):
     def __init__(self):
         super(TwoStreamNetworkLSTM, self).__init__()
         print('Model: TwoStream/ResNet18/LSTM')
-        USE_RGB=True
-        USE_FLOW=True
+        config.USE_RGB=True
+        config.USE_FLOW=True
         model = models.resnet18(pretrained=True)
         model.fc = nn.Dropout(0)
         self.RGBStream = deepcopy(model)
@@ -20,7 +20,7 @@ class TwoStreamNetworkLSTM(nn.Module):
         w['weight'] = w['weight'].mean(dim=1).repeat(1,20,1,1)
         self.FlowStream.conv1 = nn.Conv2d(20, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.FlowStream.conv1.load_state_dict(w)
-        self.hidden_size = HIDDEN_SIZE
+        self.hidden_size = config.HIDDEN_SIZE
         self.lstm = torch.nn.LSTM(512*2, self.hidden_size, 2, bidirectional=True)
         self.rgbdropout = nn.Dropout()
         self.flowdropout = nn.Dropout()

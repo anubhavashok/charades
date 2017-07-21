@@ -3,21 +3,20 @@ from torch import nn
 from torch.autograd import Variable
 from copy import deepcopy
 from torchvision import models
-from utils import *
-from config import *
+import config
 
 class TwoStreamNetworkLSTM(nn.Module):
     def __init__(self):
         super(TwoStreamNetworkLSTM, self).__init__()
         print('Model: RGB/VGG16/LSTM')
-        USE_FLOW=False
-        FEATURE_SIZE = 4096
+        config.USE_FLOW=False
+        config.FEATURE_SIZE = 4096
         model = torch.load('models/pretrained_rgb.net')#models.vgg16(pretrained=True)
         del model.classifier._modules['6']
         #model.classifier._modules['6']=nn.Linear(4096, FEATURE_SIZE)
         self.RGBStream = model
-        self.hidden_size = HIDDEN_SIZE
-        self.lstm = torch.nn.LSTM(FEATURE_SIZE, self.hidden_size, 2, bidirectional=True)
+        self.hidden_size = config.HIDDEN_SIZE
+        self.lstm = torch.nn.LSTM(config.FEATURE_SIZE, self.hidden_size, 2, bidirectional=True)
         self.rgbdropout = nn.Dropout(0.5)
         self.pool = nn.AvgPool1d(4)
 
