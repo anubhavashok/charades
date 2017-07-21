@@ -77,7 +77,7 @@ def writeTestScore(f, vid, scores):
             k += 1
     score /= k
     score = score.cpu().numpy().tolist()[:157]
-    score = scores[-1].data.cpu().numpy().tolist()[:157]
+    #score = scores[-1].data.cpu().numpy().tolist()[:157]
     f.write("%s %s\n\n" % (vid, ' '.join(map(str, score))))
 
 def removeEmptyFromTensor(input, target):
@@ -221,12 +221,12 @@ def getPredictionLossFn(cl=None, net=None):
            return cosineLoss(input1, input2, target)
     else:
         def prediction_loss(predFeature, nextFeature):
-            return kldivLoss(F.log_softmax(predFeature),  F.log_softmax(nextFeature))
+            return kldivLoss(F.log_softmax(predFeature),  F.softmax(nextFeature))
     return prediction_loss
 
 
 def getRecognitionLossFn():
-    ceLoss = CrossEntropyLoss()#(weight=classbalanceweights.cuda())
+    ceLoss = CrossEntropyLoss(weight=classbalanceweights.cuda())
     #multiLoss = BCELoss(weight=classbalanceweights.cuda())
     multiLoss = KLDivLoss(weight=classbalanceweights.cuda())
     #multiLoss = BCELoss()#MultiLabelSoftMarginLoss()
@@ -409,3 +409,13 @@ def unmapClasses(actionFeature):
             for k in a[j]:
                 output[i][k] = actionFeature[i][j]
     return output
+
+
+
+def writeLocScore(f, vid, actionFeature):
+    # Write line in outfile for each element in actionFeature
+    actionFeature = actionFeature.data
+    for i in range(actionFeature.size(0)):
+        score = actionFeature[i].cpu().numpy()
+        f.write("%s %d %s\n\n" % (vid, i+1, ' '.join(map(str, score))))
+
