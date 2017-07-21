@@ -13,7 +13,6 @@ import numpy as np
 import random
 import math
 
-from config import *
 from utils import *
 
 def load_img(filepath, transforms=None):
@@ -106,6 +105,7 @@ class CharadesLoader(data.Dataset):
         self.base_dir = base_dir
         self.remaining = []
         self.internal_counter = 0
+        #split = 'trainval' if split == 'train' else split
         self.video_names = open(os.path.join(base_dir, '%s.txt'%split)).read().split('\n')[:-1]
         #self.video_names = [v.split('/')[-1] for v in glob(os.path.join(self.base_dir, 'Charades_v1_rgb', '*'))]
         self.input_transform = input_transform
@@ -135,7 +135,7 @@ class CharadesLoader(data.Dataset):
         rgb_tensor = self.load_rgb(files) if USE_RGB else torch.Tensor(seq_len, 3, 1, 1)
         flow_tensor = self.load_flow(files) if USE_FLOW else torch.Tensor(seq_len, 2*NUM_FLOW, 1, 1)
         target = torch.LongTensor(seq_len, NUM_ACTIONS).zero_()
-        if self.split == 'train' and TRAIN_MODE=='SINGLE':
+        if self.split in ['train', 'trainval'] and TRAIN_MODE=='SINGLE':
             target = torch.LongTensor(seq_len, 1).fill_(-1)
         
         for i in range(len(files)):
@@ -144,7 +144,7 @@ class CharadesLoader(data.Dataset):
                 a, s, e = action
                 # check whether action is present in frameNum
                 if s <= frameNum and e >= frameNum:
-                    if self.split == "train" and TRAIN_MODE=='SINGLE':
+                    if self.split in ['train', 'trainval'] and TRAIN_MODE=='SINGLE':
                         #cands = all_targets[frameNum].nonzero().cpu().numpy()[0]
                         #target[i] = torch.LongTensor([int(max(cands, key=lambda x: classweights[x]))])
                         #target[i] = torch.LongTensor([int(np.random.choice(cands).astype(int))])
@@ -165,7 +165,7 @@ class CharadesLoader(data.Dataset):
             vid, frameNum = files[i]
             rgbFileName = os.path.join(self.base_dir, 'Charades_v1_rgb', vid, '%s-%06d.jpg' % (vid, frameNum))
             rgb = load_img(rgbFileName)
-            rgb = trainImgTransforms(rgb) if self.split == 'train' else valTransforms(rgb)
+            rgb = trainImgTransforms(rgb) if self.split in ['train', 'trainval'] else valTransforms(rgb)
             rgb_tensor[i] = rgb
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                     std=[0.229, 0.224, 0.225])
@@ -187,7 +187,7 @@ class CharadesLoader(data.Dataset):
                 flowx, _, _ = flowx.split()
                 flowy, _, _ = flowy.split()
                 flowImage = Image.merge("RGB", [flowx,flowy,flowx])
-                flowImage = trainFlowTransforms(flowImage) if self.split == 'train' else valTransforms(flowImage)
+                flowImage = trainFlowTransforms(flowImage) if self.split in ['train', 'trainval'] else valTransforms(flowImage)
                 flowImage = flowImage[0:2, :, :]
                 j = 2*(flowNum - (frameNum-s))
                 flow_tensor[i, j:j+2] = flowImage
@@ -256,5 +256,11 @@ class CharadesLoader(data.Dataset):
     def __len__(self):
         # The number of size 32 batches
         # TODO: remember to change hardcoded number for final testing
-        return 9347 if self.split == 'train' else len(self.video_names)
+        #return 9347 if self.split == 'train' else len(self.video_names)
+        if self.split == 'train':
+            return 9347
+        elif self.split == 'trainval':
+            return 11509
+        else:
+            return len(self.video_names)
         #return len(self.video_names)
