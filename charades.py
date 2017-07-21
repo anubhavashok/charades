@@ -2,16 +2,16 @@ import torch
 from torchvision import transforms
 from torch import nn, optim
 from torch.nn import MSELoss, KLDivLoss, NLLLoss, CrossEntropyLoss, SmoothL1Loss, MultiLabelSoftMarginLoss, MultiLabelMarginLoss
-from dataset import CharadesLoader
 from copy import deepcopy
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torchnet import meter
 
-from config import *
-from utils import *
 import numpy as np
 from time import time
+import config
+
+torch.set_num_threads(4)
 
 import argparse
 parser = argparse.ArgumentParser(description='Lets win charades')
@@ -21,25 +21,30 @@ parser.add_argument('-resume', type=str, required=False, default=None, help='Pat
 args = parser.parse_args()
 print(args.name)
 
-if USE_GPU:
-    torch.cuda.set_device(TORCH_DEVICE)
+if config.USE_GPU:
+    torch.cuda.set_device(config.TORCH_DEVICE)
 cc = None
-if LOG:
+if config.LOG:
     from pycrayon import CrayonClient
     os.system('')
     cc = CrayonClient(hostname="server_machine_address")
 net = None
-actionClassifier = getActionClassifier() 
-transformer = getTransformer() 
-if USE_LSTM:
+if config.USE_LSTM:
     #from models.vgg16_twostream_lstm import TwoStreamNetworkLSTM
-    from models.twostream_lstm import TwoStreamNetworkLSTM
-    #from models.rgb_resnet_twostream_lstm import TwoStreamNetworkLSTM
+    #from models.twostream_lstm import TwoStreamNetworkLSTM
+    #from models.flow_vgg16_twostream_lstm import TwoStreamNetworkLSTM
+    from models.rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
     #from models.global_average_rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
     net = TwoStreamNetworkLSTM()
 else:
     from models.vgg_twostream import TwoStreamNetwork
     net = TwoStreamNetwork()
+
+from config import *
+from utils import *
+
+actionClassifier = getActionClassifier() 
+transformer = getTransformer() 
 
 resume_epoch = 0
 if args.resume:
@@ -70,7 +75,8 @@ if CLIP_GRAD:
 
 kwargs = {'num_workers': 1, 'pin_memory': True}
 
-cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='SPACED')
+from dataset import CharadesLoader
+cl = CharadesLoader(DATASET_PATH, split="trainval", frame_selection='SPACED')
 predictionLossFunction = getPredictionLossFn(cl, net)
 recognitionLossFunction = getRecognitionLossFn()
 
@@ -149,10 +155,11 @@ def test(intermediate=False):
     corr = 0
     t5cum = 0
     f = open('results/%s'%(OUTPUT_NAME), "w+")
+    floc = open('results/loc_%s'%(OUTPUT_NAME), "w+")
     val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val", frame_selection='TEST'))
     for batch_idx, (data, target) in enumerate(val_loader):
         print(batch_idx)
-        if intermediate and batch_idx == 200:
+        if intermediate and batch_idx == 1700:
             break
         (curRGB, curFlow) = data
         curRGB = curRGB.squeeze(0)
@@ -166,6 +173,7 @@ def test(intermediate=False):
         #actionFeature.data = unmapClasses(actionFeature.data)
         vid = val_loader.dataset.video_names[batch_idx]
         writeTestScore(f, vid, actionFeature)
+        writeLocScore(floc, vid, actionFeature)
         #mtr.add(actionFeature.data, target.data)
         #mapmtr.add(actionFeature.data, target.data.cpu().numpy())
         #mapmtr.add(actionFeature.data, target.data, target.data)
@@ -174,9 +182,12 @@ def test(intermediate=False):
         _, action = torch.max(actionFeature, 1)
         output = actionFeature.data.cpu().numpy()
         output = output[target.data.cpu().numpy().sum(1)>0]
-        output = np.exp(output)
-        output = np.divide(output, np.expand_dims(output.sum(1), axis=1))
-        outputs.append(np.mean(output, 0))
+        output = np.mean(output, 0)
+        # Remove softmax for map computation
+        #output = np.exp(output)
+        #output = np.divide(output, output.sum())
+        #output = np.divide(output, np.expand_dims(output.sum(1), axis=1))
+        outputs.append(output)
         targets.append(np.max(target.data.cpu().numpy(), 0))
         correct = target_m.eq(action.type_as(target_m)).sum().data.cpu().numpy()
         corr += (100. * correct) / curRGB.size(0)
@@ -192,6 +203,7 @@ def test(intermediate=False):
     print('mAP', mean_ap)
     #print('Top5: ', 100*t5cum/(batch_idx))
     f.close()
+    floc.close()
     net.train()
     actionClassifier.train()
     return mean_ap, (corr/(batch_idx), 100*t5cum/(batch_idx))
