@@ -76,15 +76,17 @@ if CLIP_GRAD:
 kwargs = {'num_workers': 1, 'pin_memory': True}
 
 from dataset import CharadesLoader
-cl = CharadesLoader(DATASET_PATH, split="trainval", frame_selection='SPACED')
+cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='SPACED')
 predictionLossFunction = getPredictionLossFn(cl, net)
 recognitionLossFunction = getRecognitionLossFn()
 
 def train():
     global actionClassifier
     global net
+    global transformer
     net.train()
     actionClassifier.train()
+    transformer.train()
     #sampler = torch.utils.data.sampler.WeightedRandomSampler(classbalanceweights, len(cl))
     train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
     for epoch in range(resume_epoch, EPOCHS):
@@ -126,7 +128,7 @@ def train():
                 jointLoss = recognitionLoss + LAMBDA * predictionLoss
             jointLoss.backward()
             _, action = torch.max(actionFeature, 1)
-            if batch_idx % 8 == 0:
+            if batch_idx % 4 == 0:
                 optimizer.step()
                 optimizer.zero_grad()
             print(batch_idx, float(jointLoss.data.cpu().numpy()[0]))
@@ -135,9 +137,6 @@ def train():
         print('Time elapsed %f' % (time() - start))
         if epoch % TEST_FREQ == 0:
             print('Test epoch %d:' % epoch)
-            #torch.save({'net': net,
-            #            'classifier': actionClassifier
-            #           }, 'checkpoints/checkpoint%d.net' % epoch)
             mean_ap, acc = test()
             if SAVE_MODEL:
                 saveModel(net, actionClassifier, transformer, mean_ap, epoch)
