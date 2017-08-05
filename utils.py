@@ -414,8 +414,11 @@ def unmapClasses(actionFeature):
 
 def writeLocScore(f, vid, actionFeature):
     # Write line in outfile for each element in actionFeature
-    actionFeature = actionFeature.data
+    scores = actionFeature.data.clone()
     for i in range(actionFeature.size(0)):
-        score = actionFeature[i].cpu().numpy()
+        score = scores[i].cpu().numpy()
         f.write("%s %d %s\n\n" % (vid, i+1, ' '.join(map(str, score))))
+
+def numParams(model):
+        return sum([len(w.view(-1)) for w in model.parameters()])
 
