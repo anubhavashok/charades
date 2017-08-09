@@ -33,7 +33,7 @@ if config.USE_LSTM:
     #from models.vgg16_twostream_lstm import TwoStreamNetworkLSTM
     #from models.twostream_lstm import TwoStreamNetworkLSTM
     #from models.flow_vgg16_twostream_lstm import TwoStreamNetworkLSTM
-    from models.rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
+    from models.rgb_resnet_twostream_lstm import TwoStreamNetworkLSTM
     #from models.global_average_rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
     net = TwoStreamNetworkLSTM()
 else:
@@ -89,7 +89,13 @@ def train():
     transformer.train()
     #sampler = torch.utils.data.sampler.WeightedRandomSampler(classbalanceweights, len(cl))
     train_loader = torch.utils.data.DataLoader(cl, shuffle=True, **kwargs)
+    meter_rec = meter.AverageValueMeter()
+    meter_pred = meter.AverageValueMeter()
+    meter_joint = meter.AverageValueMeter()
     for epoch in range(resume_epoch, EPOCHS):
+        meter_rec.reset()
+        meter_pred.reset()
+        meter_joint.reset()
         adjust_learning_rate(optimizer, epoch)
         start = time()
         print('Training for epoch %d' % (epoch))
@@ -126,12 +132,20 @@ def train():
                 predictionLoss = predictionLossFunction(predFeature, nextFeature)
                 #actionFeature[(target == 157).data.cuda().repeat(1, 158)] = 0
                 jointLoss = recognitionLoss + LAMBDA * predictionLoss
+                meter_pred.add(predictionLoss.data.cpu().numpy()[0])
             jointLoss.backward()
+            meter_rec.add(recognitionLoss.data.cpu().numpy()[0])
+            meter_joint.add(jointLoss.data.cpu().numpy()[0])
             _, action = torch.max(actionFeature, 1)
+            if batch_idx % 250 == 0:
+                print('%.2f%% [%d/%d] Recognition loss: %f, Prediction loss: %f, Joint loss: %f' % ((100. * batch_idx)/len(train_loader), batch_idx, len(train_loader), meter_rec.value()[0], meter_pred.value()[0], meter_joint.value()[0]))
+                meter_rec.reset()
+                meter_pred.reset()
+                meter_joint.reset()
             if batch_idx % 4 == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-            print(batch_idx, float(jointLoss.data.cpu().numpy()[0]))
+            #print(batch_idx, float(jointLoss.data.cpu().numpy()[0]))
             if INTERMEDIATE_TEST and (batch_idx+1) % INTERMEDIATE_TEST == 0:
                 print('Intermediate testing: ', test(intermediate=True))
         print('Time elapsed %f' % (time() - start))
