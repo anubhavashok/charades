@@ -33,7 +33,7 @@ if config.USE_LSTM:
     #from models.vgg16_twostream_lstm import TwoStreamNetworkLSTM
     #from models.twostream_lstm import TwoStreamNetworkLSTM
     #from models.flow_vgg16_twostream_lstm import TwoStreamNetworkLSTM
-    from models.rgb_resnet_twostream_lstm import TwoStreamNetworkLSTM
+    from models.inflated_inception_twostream import TwoStreamNetworkLSTM
     #from models.global_average_rgb_vgg16_twostream_lstm import TwoStreamNetworkLSTM
     net = TwoStreamNetworkLSTM()
 else:
@@ -75,8 +75,8 @@ if CLIP_GRAD:
 
 kwargs = {'num_workers': 1, 'pin_memory': True}
 
-from dataset import CharadesLoader
-cl = CharadesLoader(DATASET_PATH, split="train", frame_selection='SPACED')
+from dataset_inception import InceptionDataset 
+cl = InceptionDataset(DATASET_PATH, split="train")
 predictionLossFunction = getPredictionLossFn(cl, net)
 recognitionLossFunction = getRecognitionLossFn()
 
@@ -100,6 +100,8 @@ def train():
         start = time()
         print('Training for epoch %d' % (epoch))
         for batch_idx, (data, target) in enumerate(train_loader):
+            if batch_idx >= 10000:
+                break
             (rgb, flow) = data
             rgb = rgb.squeeze(0)
             flow = flow.squeeze(0)
@@ -112,13 +114,11 @@ def train():
                 nextRGB = Variable(nextRGB, requires_grad=False).cuda()
                 nextFlow = flow[1:, :, :]
                 nextFlow = Variable(nextFlow, requires_grad=False).cuda()
-            rgb = rgb[:-1, :, :]
             rgb = Variable(rgb).cuda()
-            flow = flow[:-1, :, :]
             flow = Variable(flow).cuda()
-            target = Variable(target[:-1].long(), requires_grad=False).cuda().detach()
-            curFeature = net(rgb, flow)
-            actionFeature = actionClassifier(curFeature)
+            target = Variable(target.long(), requires_grad=False).cuda().detach()
+            actionFeature = net(rgb, flow)
+            #actionFeature = actionClassifier(curFeature)
             recognitionLoss = recognitionLossFunction(actionFeature, target)
             jointLoss = recognitionLoss
             if LAMBDA > 0:
@@ -159,6 +159,8 @@ def train():
 def test(intermediate=False):
     #mtr = meter.ConfusionMeter(k=NUM_ACTIONS)
     #mapmtr = meter.mAPMeter()
+    scores = {}
+    target_scores = {}
     outputs = []
     targets = []
     global actionClassifier
@@ -169,7 +171,8 @@ def test(intermediate=False):
     t5cum = 0
     f = open('results/%s'%(OUTPUT_NAME), "w+")
     floc = open('results/loc_%s'%(OUTPUT_NAME), "w+")
-    val_loader = torch.utils.data.DataLoader(CharadesLoader(DATASET_PATH, split="val", frame_selection='TEST'))
+    val_loader = torch.utils.data.DataLoader(InceptionDataset(DATASET_PATH, split="val"))
+    print(len(val_loader))
     for batch_idx, (data, target) in enumerate(val_loader):
         print(batch_idx)
         if intermediate and batch_idx == 1700:
@@ -181,28 +184,34 @@ def test(intermediate=False):
         curRGB = Variable(curRGB, volatile=True).cuda()
         curFlow = Variable(curFlow, volatile=True).cuda()
         target = Variable(target, volatile=True).cuda()
-        curFeature = net(curRGB, curFlow).detach()
-        actionFeature = actionClassifier(curFeature).detach()
+        actionFeature = net(curRGB, curFlow).detach()
+        vid = val_loader.dataset.snippets[batch_idx][0]
+        # aggregate batches into map[vid]
+        #actionFeature = actionClassifier(curFeature).detach()
         #actionFeature.data = unmapClasses(actionFeature.data)
-        vid = val_loader.dataset.video_names[batch_idx]
-        writeTestScore(f, vid, actionFeature)
-        writeLocScore(floc, vid, actionFeature)
+        #vid = val_loader.dataset.video_names[batch_idx]
+        #writeTestScore(f, vid, actionFeature)
+        #writeLocScore(floc, vid, actionFeature)
         #mtr.add(actionFeature.data, target.data)
         #mapmtr.add(actionFeature.data, target.data.cpu().numpy())
         #mapmtr.add(actionFeature.data, target.data, target.data)
         #t5a = top5acc(actionFeature, target)
-        _, target_m = torch.max(target, 1)
-        _, action = torch.max(actionFeature, 1)
+        #_, target_m = torch.max(target, 1)
+        action, _ = torch.max(actionFeature, 0)
         output = actionFeature.data.cpu().numpy()
-        output = output[target.data.cpu().numpy().sum(1)>0]
-        output = np.mean(output, 0)
         # Remove softmax for map computation
         #output = np.exp(output)
         #output = np.divide(output, output.sum())
         #output = np.divide(output, np.expand_dims(output.sum(1), axis=1))
-        outputs.append(output)
-        targets.append(np.max(target.data.cpu().numpy(), 0))
-        correct = target_m.eq(action.type_as(target_m)).sum().data.cpu().numpy()
+        target, _ = target.max(0)
+        if vid not in scores:
+            target_scores[vid] = []
+            scores[vid] = []
+        scores[vid].append(output[0])
+        target_scores[vid].append(target.data.cpu().numpy())
+        outputs.append(output[0])
+        targets.append(target.data.cpu().numpy()[0])
+        correct = target.eq(action.type_as(target)).sum().data.cpu().numpy()
         corr += (100. * correct) / curRGB.size(0)
     #np.savetxt('cmatrix.txt', mtr.value(), fmt="%.2e")
     #print(mapmtr.value())
@@ -211,6 +220,8 @@ def test(intermediate=False):
     #print(corr/(batch_idx))
     outputs = np.array(outputs)
     targets = np.array(targets)
+    print(outputs.shape, targets.shape)
+    # Aggregate all of scores, into outputs, targets
     ap = charades_ap(outputs, targets)
     mean_ap = np.mean(ap)
     print('mAP', mean_ap)
@@ -224,4 +235,5 @@ def test(intermediate=False):
 if __name__ == "__main__":
     # Print experiment details
     print_config()
+    test()
     train()
