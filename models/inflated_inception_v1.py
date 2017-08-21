@@ -30,7 +30,8 @@ class Inception(nn.Module):
         )
         self.branch2 = nn.Sequential(
             BasicConv3d(in_channels, channels[4], (1, 1, 1)),
-            BasicConv3d(channels[4], channels[5], (5, 5, 5), padding=(2, 2, 2)),
+            #BasicConv3d(channels[4], channels[5], (5, 5, 5), padding=(2, 2, 2)),
+            BasicConv3d(channels[4], channels[5], (3, 3, 3), padding=(1, 1, 1)),
         )
         self.branch3 = nn.Sequential(
             nn.MaxPool3d((3, 3, 3), stride=(1, 1, 1), padding=(1, 1, 1)),
@@ -57,15 +58,18 @@ class Inception3D(nn.Module):
         self.inc1 = Inception([192, 64, 96, 128, 16, 32, 32])
         self.inc2 = Inception([256, 128, 128, 192, 32, 96, 64])
         self.maxpool3 = nn.MaxPool3d((3, 3, 3), (2, 2, 2))
-        self.inc3 = Inception([480, 192, 96, 204, 16, 48, 64])
-        self.inc4 = Inception([508, 160, 112, 224, 24, 64, 64])
+        self.inc3 = Inception([480, 192, 96, 208, 16, 48, 64])
+        #self.inc3 = Inception([480, 192, 96, 204, 16, 48, 64])
+        self.inc4 = Inception([512, 160, 112, 224, 24, 64, 64])
+        #self.inc4 = Inception([508, 160, 112, 224, 24, 64, 64])
         self.inc5 = Inception([512, 128, 128, 256, 24, 64, 64])
         self.inc6 = Inception([512, 112, 144, 288, 32, 64, 64])
         self.inc7 = Inception([528, 256, 160, 320, 32, 128, 128])
         self.maxpool4 = nn.MaxPool3d((2, 2, 2), (2, 2, 2))
-        self.inc8 = Inception([832, 256, 160, 320, 48, 128, 128])
+        self.inc8 = Inception([832, 256, 160, 320, 32, 128, 128])
+        #self.inc8 = Inception([832, 256, 160, 320, 48, 128, 128])
         self.inc9 = Inception([832, 384, 192, 384, 48, 128, 128])
-        self.padding = nn.ReplicationPad3d(1)
+        self.padding = nn.ReplicationPad3d((1, 0, 1, 0, 0, 0))
         self.avgpool = nn.AvgPool3d((2, 7, 7), stride=(1, 1, 1))
         self.conv4 = BasicConv3d(1024, num_classes, (1, 1, 1))
     
@@ -89,6 +93,8 @@ class Inception3D(nn.Module):
         x = self.padding(x)
         x = self.avgpool(x)
         x = self.conv4(x)
+        # average the final output
+        x = x.mean(2)
         return x
 
 
